@@ -2,83 +2,131 @@
 
 Multiway ve sistem kuponları için **maksimum kazanç (max gain)** hesaplayan REST API.
 
-Kupon bilgisi (event'ler, işaretlenen seçimler, oranlar, sistem tanımı ve stake) gönderilir;
+Kupona ait seçimler (maç kimliği, oddType kimliği, outcome, oran) ve kupon tutarı gönderilir;
 servis en iyi senaryoda oluşacak toplam ödemeyi döner.
 
 ---
 
-## Kupon modeli
+## Girdi modeli
 
-| Kavram | Anlamı |
+Kupon, düz bir **seçim listesi**dir. Her seçim şunları taşır:
+
+| Alan | Açıklama |
 |---|---|
-| **Event** | Bir maç / karşılaşma. |
-| **Selection** | Event için işaretlenen sonuç (`1`, `X`, `over_2_5`, …). Aynı event'in seçimleri **birbirini dışlar** — yalnızca biri gerçekleşir. |
-| **Multiway** | Bir event için birden fazla seçim işaretlenmesi. Kupon, bu seçimlerin kombinasyonları kadar satıra açılır. |
-| **Sistem (`k`)** | Banko olmayan event'lerden `k`'lı alt kümeler alınarak satır üretilir. `[2,3]` gibi birden fazla boyut aynı anda verilebilir. |
-| **Banko** | `banker: true` olan event her satırda zorunlu olarak yer alır; sistem yalnızca kalanlara uygulanır. |
-| **Line (satır/way)** | Fiilen oynanan tek bir kombine. Toplam stake satırlara bölünür (`stake_mode: "total"`) ya da her satıra ayrı yatırılır (`stake_mode: "per_line"`). |
+| `matchId` | Maç kimliği. Aynı maça **birden fazla** seçim gelebilir — "multiway". |
+| `oddTypeId` | Piyasa kimliği. Ör. `1` → Maç Sonucu (1X2), `2` → Çift Şans. Katalog: `GET /api/v1/odd-types` |
+| `outcome` | Sonuç kodu. Ör. `"1"`, `"X2"`, `"2.5 Üst"`, `"2-1"` |
+| `odds` | Ondalık oran (`> 1.00`) |
 
-### "Max gain" tanımı
-
-Her event'te **tam olarak bir** sonuç gerçekleşir. Max gain, bu gerçekleşme senaryoları
-arasından **kazanan tüm satırların toplam ödemesini** en büyük yapanıdır.
-
-Sistem kuponlarında aynı anda birden fazla satır tutabildiği için bu, "en iyi tek satır"dan
-farklıdır — o değer de bilgi amacıyla `max_single_line_gain` alanında döner.
+Kupon düzeyinde: `couponAmount` (kupon tutarı), isteğe bağlı `system`, `bankerMatchIds`,
+`bonusMultiplier`, `maxPayoutCap`, `currency`.
 
 ---
 
-## Nasıl hesaplanıyor
+## Maç ağırlığı: hangi seçimler birlikte kazanır?
 
-Naif yaklaşım tüm satırları ve tüm sonuç senaryolarını üretmeyi gerektirir; bu üstel karmaşıklıktır.
-Servis bunun yerine iki gözleme dayanan kapalı forma indirger:
+Aynı maçtaki iki seçimin birlikte tutup tutamayacağını belirleyen şey oddType'larının farklı
+olması **değil**, aynı anda gerçekleşebilir olmalarıdır:
 
-1. **En iyi senaryoda her event'te en yüksek oranlı seçim gerçekleşir.** Bir event'te hangi seçimin
-   tuttuğu, o event'i içeren satırların yalnızca ödemesini etkiler — başka satırları geçersiz kılmaz.
-   Oranlar pozitif olduğundan her event'te maksimumu seçmek toplamı zayıf anlamda domine eder.
+| Seçimler | Birlikte tutar mı? | Sonuç |
+|---|---|---|
+| `1X2 "1"` + `1X2 "X"` | ✗ ev kazanır **ve** berabere olamaz | **max** |
+| `1X2 "1"` + `ÇŞ "1X"` | ✓ ev kazanırsa ikisi de tutar | **toplam** |
+| `1X2 "1"` + `ÇŞ "X2"` | ✗ kesişimleri boş | **max** |
+| `1X2 "2"` + `"0.5 Alt"` | ✗ deplasman kazanırsa en az 1 gol var | **max** |
 
-2. **Realizasyon sabitlendiğinde her `k`'lı alt kümeden tam olarak bir satır kazanır** ve ödemesi o
-   alt kümedeki oranların çarpımıdır. Kazanan satırların toplamı böylece oranların
-   **elementer simetrik polinomu** `e_k`'ya eşitlenir:
+Dolayısıyla maçın ağırlığı, *birlikte gerçekleşebilen* seçim alt kümeleri arasında oran toplamı
+en yüksek olanıdır:
 
 ```
-max_gain     = satır_stake × (Π banko oranları) × Σ_k e_k(en yüksek oranlar)
-satır_sayısı =               (Π banko seçim sayıları) × Σ_k e_k(seçim sayıları)
+w(maç) = max { Σ odds(S) : S seçim alt kümesi, S'nin ortak gerçekleşme senaryosu var }
 ```
 
-`e_k` standart DP ile **O(M²)** hesaplanır. 20 bacaklı bir 3/20 sistem (1140 satır) mikrosaniyeler
-mertebesinde çözülür; 50 bacaklı kuponlar bile sorun değildir.
+Bu, "aynı oddType → max, farklı oddType → topla" kuralının doğru genellemesidir: ilk iki satırda
+onunla aynı sonucu verir, son iki satırda ise onun fazla hesapladığı durumu düzeltir.
 
-Doğruluk, `tests/reference.py` içindeki satırları tek tek üreten kaba kuvvet uygulamasıyla
-120 rastgele kupon üzerinde birebir karşılaştırılarak doğrulanır.
+### Uyumluluk nasıl biliniyor
 
-Tüm para aritmetiği `Decimal` ile (60 hane hassasiyet) yapılır; ödemeler 2 ondalığa
-**aşağı yuvarlanır** (`ROUND_DOWN`). `stake.per_line` ödenen bir tutar değil, toplam stake'in
-satırlara bölünmüş hâlidir — milyonluk sistemlerde kuruşun altına indiği için 6 ondalıkla döner.
+Gol bazlı tüm piyasalar tek bir ortak sonuç uzayında modellenir:
+
+```
+Atom = (İY_ev, İY_dep, MS_ev, MS_dep)      # 1296 atom, skorlar 0..7, İY ≤ MS
+```
+
+Her `(oddTypeId, outcome)` ikilisi, kazandığı atomların bir bit maskesine çevrilir (önbelleklenir).
+İki seçim, maskelerinin kesişimi boş değilse uyumludur. İlk yarı ve maç sonu skorlarının **aynı**
+atomda tutulması sayesinde `"İY 2-0"` ile `"MS 1.5 Alt"` gibi çelişkiler de kendiliğinden elenir.
+
+En iyi alt küme, budamalı bir derinlik-öncelikli aramayla bulunur: kalan oranların toplamı mevcut
+en iyiyi geçemiyorsa dal kesilir. Yanıt, seçilen alt kümeyi **ve onu gerçekleyen örnek skoru** döner.
 
 ---
 
-## Kurulum
+## oddType kataloğu
+
+`GET /api/v1/odd-types` hangi id'nin hangi piyasa olduğunu listeler. Katalog
+[`app/services/odd_types.py`](app/services/odd_types.py) içindedir ve yeni id eklemek tek satırdır:
+
+```python
+ODD_TYPE_MARKET: dict[int, str] = {
+    1: "MS_1X2",      # Maç Sonucu (1X2)
+    2: "CIFT_SANS",   # Çift Şans
+    3: "ALT_UST",     # <- yeni id böyle eklenir
+}
+```
+
+Piyasaların *anlamı* [`app/services/markets.py`](app/services/markets.py) içinde hazırdır.
+Tanımlı piyasalar:
+
+`MS_1X2` · `CIFT_SANS` · `IY_1X2` · `IY_CIFT_SANS` · `ALT_UST` · `IY_ALT_UST` ·
+`KARSILIKLI_GOL` · `DOGRU_SKOR` · `IY_MS` · `TEK_CIFT` · `TOPLAM_GOL` · `HANDIKAP`
+
+> **Katalogda yalnızca teyitli id'ler var (1 ve 2).** Yanlış bir id eşlemesi, çelişen seçimlerin
+> uyumlu sayılmasına yol açacağı için tahmine dayalı eşleme eklenmedi.
+
+**Katalogda olmayan id gelirse istek reddedilmez.** Güvenli geri düşüş uygulanır:
+aynı `oddTypeId`'nin farklı outcome'ları dışlayıcı (→ max), farklı id'ler bağımsız (→ toplam)
+sayılır ve durum `warnings` alanında bildirilir.
+
+---
+
+## Kupon toplamı nasıl hesaplanıyor
+
+Her satır (line/way), dahil olduğu her maçtan **tam olarak bir** seçim alır. Sistem tanımı, banko
+olmayan maçlardan `k`'lı alt kümeler üretir; banko maçlar her satırda yer alır.
+
+Naif yaklaşım tüm satırları ve tüm sonuç senaryolarını üretmeyi gerektirir — üstel. Ancak
+realizasyon sabitlendiğinde `k` boyutlu her alt kümeden kazanan satırların toplamı, maç
+ağırlıklarının **elementer simetrik polinomu** `e_k`'ya eşitlenir:
+
+```
+max_gain     = satır_stake × (Π banko ağırlıkları)     × Σ_k e_k(ağırlıklar)
+satır_sayısı =               (Π banko seçim sayıları)  × Σ_k e_k(seçim sayıları)
+```
+
+`e_k` standart DP ile **O(M²)** hesaplanır; satırlar hiçbir zaman tek tek üretilmez.
+25 maçlık bir `[2,3,4]` sistem (**1.089.450 satır**) ~1.5 ms'de döner.
+
+Doğruluk, [`tests/reference.py`](tests/reference.py) içindeki **kaba kuvvet** uygulamasıyla
+güvence altına alınır: o uygulama tüm satırları açıkça üretir, maçların tüm sonuç senaryolarını
+dolaşır ve yalnızca tanımı uygular. 150 rastgele kupon üzerinde iki sonuç birebir karşılaştırılır.
+
+Tüm para aritmetiği `Decimal` ile (60 hane) yapılır; ödemeler 2 ondalığa **aşağı yuvarlanır**
+(`ROUND_DOWN`). `stake.perLine` ödenen bir tutar değil, kupon tutarının satırlara bölünmüş
+hâlidir — milyonluk sistemlerde kuruşun altına indiği için 6 ondalıkla döner.
+
+---
+
+## Kurulum ve çalıştırma
 
 ```bash
 uv venv --python 3.12
 uv pip install -e ".[dev]"
-```
-
-## Çalıştırma
-
-```bash
 uv run uvicorn app.main:app --reload
 ```
 
 - Swagger UI: <http://127.0.0.1:8000/docs>
-- OpenAPI şeması: <http://127.0.0.1:8000/openapi.json>
-
-## Test
-
-```bash
-uv run pytest -q
-```
+- Testler: `uv run pytest -q`
 
 ---
 
@@ -88,60 +136,74 @@ uv run pytest -q
 |---|---|---|
 | `POST` | `/api/v1/coupons/max-gain` | Tek kupon hesaplar |
 | `POST` | `/api/v1/coupons/max-gain/batch` | En fazla 100 kuponu tek istekte hesaplar |
+| `GET` | `/api/v1/odd-types` | oddTypeId kataloğu |
 | `GET` | `/api/v1/health` | Sağlık kontrolü |
+
+JSON alan adları camelCase'tir; snake_case gövdeler de kabul edilir.
 
 ### Örnek istek
 
-`b1` banko, `m1` multiway (iki seçim), kalanlar tekli — 2'li sistem:
+`900` banko, `901` multiway (1X2 + Çift Şans, uyumlu), 2'li sistem:
 
 ```bash
 curl -s -X POST http://127.0.0.1:8000/api/v1/coupons/max-gain \
   -H 'Content-Type: application/json' \
   -d '{
-    "stake": "10.00",
-    "stake_mode": "per_line",
-    "currency": "TRY",
+    "couponAmount": "10.00",
+    "stakeMode": "per_line",
     "system": { "sizes": [2] },
-    "events": [
-      { "id": "b1", "name": "Real - Barca", "banker": true,
-        "selections": [ { "id": "1", "odds": "1.50" } ] },
-      { "id": "m1", "name": "GS - FB",
-        "selections": [ { "id": "1", "odds": "2.00" }, { "id": "X", "odds": "3.50" } ] },
-      { "id": "m2", "selections": [ { "id": "2", "odds": "4.00" } ] },
-      { "id": "m3", "selections": [ { "id": "1", "odds": "1.80" } ] }
+    "bankerMatchIds": [900],
+    "selections": [
+      { "matchId": 900, "oddTypeId": 1, "outcome": "1",  "odds": "1.50" },
+      { "matchId": 901, "oddTypeId": 1, "outcome": "1",  "odds": "2.00" },
+      { "matchId": 901, "oddTypeId": 2, "outcome": "1X", "odds": "1.30" },
+      { "matchId": 902, "oddTypeId": 1, "outcome": "2",  "odds": "4.00" },
+      { "matchId": 903, "oddTypeId": 1, "outcome": "1",  "odds": "1.80" }
     ]
   }'
 ```
 
-### Örnek yanıt
+### Örnek yanıt (kısaltılmış)
 
 ```json
 {
   "currency": "TRY",
-  "stake": { "total": "50.00", "per_line": "10.000000", "line_count": 5 },
-  "max_gain": "412.50",
-  "net_profit": "362.50",
-  "max_single_line_gain": "210.00",
-  "effective_multiplier": "8.2500",
+  "stake": { "total": "50.00", "perLine": "10.000000", "lineCount": 5 },
+  "maxGain": "395.10",
+  "netProfit": "345.10",
+  "maxSingleLineGain": "120.00",
+  "effectiveMultiplier": "7.9020",
   "capped": false,
-  "best_scenario": [
-    { "event_id": "b1", "event_name": "Real - Barca", "selection_id": "1",
-      "selection_name": null, "odds": "1.50", "banker": true },
-    { "event_id": "m1", "event_name": "GS - FB", "selection_id": "X",
-      "selection_name": null, "odds": "3.50", "banker": false },
-    { "event_id": "m2", "event_name": null, "selection_id": "2",
-      "selection_name": null, "odds": "4.00", "banker": false },
-    { "event_id": "m3", "event_name": null, "selection_id": "1",
-      "selection_name": null, "odds": "1.80", "banker": false }
+  "matches": [
+    {
+      "matchId": 901,
+      "banker": false,
+      "selectionCount": 2,
+      "weight": "3.30",
+      "groups": [
+        {
+          "group": "GOALS",
+          "oddsSum": "3.30",
+          "combined": true,
+          "winningSelections": [
+            { "oddTypeId": 1, "oddTypeName": "Maç Sonucu (1X2)", "outcome": "1",  "odds": "2.00" },
+            { "oddTypeId": 2, "oddTypeName": "Çift Şans",        "outcome": "1X", "odds": "1.30" }
+          ],
+          "scoreline": { "halfTime": "0-0", "fullTime": "1-0" }
+        }
+      ]
+    }
   ],
-  "breakdown": [ { "system_size": 2, "line_count": 5, "gross_gain": "412.50" } ],
+  "breakdown": [ { "systemSize": 2, "lineCount": 5, "grossGain": "395.10" } ],
   "warnings": []
 }
 ```
 
-`m1` için `X` seçilmesinin nedeni oranının daha yüksek olmasıdır (3.50 > 2.00).
-Beş satırın üçü (banko + 2'li alt kümeler) en iyi senaryoda birlikte kazanır:
-`10 × 1.50 × (3.50×4.00 + 3.50×1.80 + 4.00×1.80) = 412.50`.
+`901` için ağırlık `2.00 + 1.30 = 3.30`: ev sahibi kazandığında hem `1X2 "1"` hem `ÇŞ "1X"` tutar,
+`combined: true` bunu belirtir. `scoreline` o senaryoyu gerçekleyen örnek skordur.
+
+Beş satırın üçü en iyi senaryoda birlikte kazanır:
+`10 × 1.50 × (3.30×4.00 + 3.30×1.80 + 4.00×1.80) = 395.10`.
 
 ---
 
@@ -149,26 +211,23 @@ Beş satırın üçü (banko + 2'li alt kümeler) en iyi senaryoda birlikte kaza
 
 | Alan | Tip | Zorunlu | Açıklama |
 |---|---|---|---|
-| `events[]` | dizi | ✅ | 1–50 event |
-| `events[].id` | string | ✅ | Kupon içinde tekil |
-| `events[].selections[]` | dizi | ✅ | Event başına 1–20 seçim, id'leri tekil |
-| `events[].selections[].odds` | decimal | ✅ | `> 1.00` |
-| `events[].banker` | bool | — | Varsayılan `false` |
-| `stake` | decimal | ✅ | `> 0` |
-| `stake_mode` | `total` \| `per_line` | — | Varsayılan `total` |
+| `selections[]` | dizi | ✅ | En az 1 seçim; en fazla 50 maç, maç başına 12 seçim |
+| `selections[].matchId` | int \| string | ✅ | Yanıtta gönderilen tiple aynen döner |
+| `selections[].oddTypeId` | int | ✅ | Katalogda yoksa geri düşüş + uyarı |
+| `selections[].outcome` | string | ✅ | Piyasaya göre çözümlenir |
+| `selections[].odds` | decimal | ✅ | `> 1.00` |
+| `couponAmount` | decimal | ✅ | `> 0` |
+| `stakeMode` | `total` \| `per_line` | — | Varsayılan `total` |
 | `system.sizes[]` | int dizisi | — | Verilmezse tam kombine varsayılır |
-| `bonus_multiplier` | decimal | — | Ör. `1.10` → %10 bonus |
-| `max_payout_cap` | decimal | — | Aşılırsa ödeme kırpılır, `capped: true` döner |
+| `bankerMatchIds[]` | dizi | — | Her satırda zorunlu yer alacak maçlar |
+| `bonusMultiplier` | decimal | — | Ör. `1.10` → %10 bonus |
+| `maxPayoutCap` | decimal | — | Aşılırsa ödeme kırpılır, `capped: true` |
 | `currency` | ISO-4217 | — | Varsayılan `TRY` |
 
-Geçersiz kuponlar `422` ile ve açıklayıcı bir `detail` mesajıyla reddedilir.
+Aynı `(matchId, oddTypeId, outcome)` üçlüsü iki kez gönderilemez. Geçersiz kuponlar `422` ile ve
+açıklayıcı bir `detail` mesajıyla reddedilir.
 
 ## Yapılandırma
 
-Ortam değişkenleri `MAXGAIN_` önekiyle okunur (`.env` dosyası da desteklenir):
-
-| Değişken | Varsayılan |
-|---|---|
-| `MAXGAIN_CORS_ORIGINS` | `["*"]` |
-| `MAXGAIN_MAX_BATCH_SIZE` | `100` |
-| `MAXGAIN_ROOT_PATH` | `""` |
+Ortam değişkenleri `MAXGAIN_` önekiyle okunur (`.env` de desteklenir):
+`MAXGAIN_CORS_ORIGINS`, `MAXGAIN_MAX_BATCH_SIZE`, `MAXGAIN_ROOT_PATH`.

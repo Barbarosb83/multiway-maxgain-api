@@ -2,46 +2,60 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException
 
 from app.core.config import settings
-from app.models.schemas import CouponIn, ErrorOut, MaxGainOut
+from app.models.schemas import CouponIn, ErrorOut, MaxGainOut, OddTypeOut
 from app.services.max_gain import (
     CouponError,
     CouponInput,
-    EventInput,
     MaxGainResult,
     SelectionInput,
     calculate_max_gain,
 )
+from app.services.odd_types import catalog
 
 router = APIRouter()
 
+# Starlette'in HTTP_422_UNPROCESSABLE_ENTITY sabiti sürümler arasında yeniden
+# adlandırıldığı için doğrudan kod kullanılır.
+HTTP_422 = 422
 
-def _to_domain(payload: CouponIn) -> CouponInput:
-    """API şemasını framework'ten bağımsız domain modeline çevirir."""
-    return CouponInput(
-        events=tuple(
-            EventInput(
-                id=event.id,
-                name=event.name,
-                banker=event.banker,
-                selections=tuple(
-                    SelectionInput(id=s.id, name=s.name, odds=s.odds) for s in event.selections
-                ),
+
+def _to_domain(payload: CouponIn) -> tuple[CouponInput, dict[str, str | int]]:
+    """API şemasını domain modeline çevirir.
+
+    Maç kimlikleri içeride string olarak normalize edilir; yanıtta çağıranın
+    gönderdiği tip (int ya da string) korunsun diye orijinaller de döndürülür.
+    """
+    original_ids: dict[str, str | int] = {}
+    selections = []
+    for selection in payload.selections:
+        key = str(selection.match_id)
+        original_ids.setdefault(key, selection.match_id)
+        selections.append(
+            SelectionInput(
+                match_id=key,
+                odd_type_id=selection.odd_type_id,
+                outcome=selection.outcome.strip(),
+                odds=selection.odds,
             )
-            for event in payload.events
-        ),
-        stake=payload.stake,
+        )
+
+    coupon = CouponInput(
+        selections=tuple(selections),
+        coupon_amount=payload.coupon_amount,
         stake_mode=payload.stake_mode,
         system_sizes=tuple(payload.system.sizes) if payload.system else None,
+        banker_match_ids=frozenset(str(m) for m in payload.banker_match_ids),
         bonus_multiplier=payload.bonus_multiplier,
         max_payout_cap=payload.max_payout_cap,
         currency=payload.currency.upper(),
     )
+    return coupon, original_ids
 
 
-def _to_response(result: MaxGainResult) -> MaxGainOut:
+def _to_response(result: MaxGainResult, original_ids: dict[str, str | int]) -> MaxGainOut:
     return MaxGainOut(
         currency=result.currency,
         stake={
@@ -54,10 +68,37 @@ def _to_response(result: MaxGainResult) -> MaxGainOut:
         max_single_line_gain=result.max_single_line_gain,
         effective_multiplier=result.effective_multiplier,
         capped=result.capped,
-        best_scenario=[pick.__dict__ for pick in result.best_scenario],
+        matches=[
+            {
+                "match_id": original_ids.get(match.match_id, match.match_id),
+                "banker": match.banker,
+                "selection_count": match.selection_count,
+                "weight": match.weight,
+                "groups": [
+                    {
+                        "group": group.group,
+                        "odds_sum": group.odds_sum,
+                        "combined": group.combined,
+                        "winning_selections": [w.__dict__ for w in group.winning_selections],
+                        "scoreline": group.scoreline,
+                    }
+                    for group in match.groups
+                ],
+            }
+            for match in result.matches
+        ],
         breakdown=[item.__dict__ for item in result.breakdown],
         warnings=list(result.warnings),
     )
+
+
+def _compute(payload: CouponIn) -> MaxGainOut:
+    coupon, original_ids = _to_domain(payload)
+    try:
+        result = calculate_max_gain(coupon)
+    except CouponError as exc:
+        raise HTTPException(HTTP_422, detail=str(exc)) from exc
+    return _to_response(result, original_ids)
 
 
 @router.post(
@@ -68,11 +109,7 @@ def _to_response(result: MaxGainResult) -> MaxGainOut:
 )
 def compute_max_gain(payload: CouponIn) -> MaxGainOut:
     """Multiway ve/veya sistem kuponunun en iyi senaryodaki toplam ödemesini döner."""
-    try:
-        result = calculate_max_gain(_to_domain(payload))
-    except CouponError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    return _to_response(result)
+    return _compute(payload)
 
 
 @router.post(
@@ -84,24 +121,36 @@ def compute_max_gain(payload: CouponIn) -> MaxGainOut:
 def compute_max_gain_batch(payload: list[CouponIn]) -> list[MaxGainOut]:
     """Kupon listesini sırayla hesaplar; herhangi biri geçersizse 422 döner."""
     if not payload:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Kupon listesi boş olamaz."
-        )
+        raise HTTPException(HTTP_422, detail="Kupon listesi boş olamaz.")
     if len(payload) > settings.max_batch_size:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            HTTP_422,
             detail=f"Tek istekte en fazla {settings.max_batch_size} kupon gönderilebilir.",
         )
 
     results: list[MaxGainOut] = []
     for index, coupon in enumerate(payload):
         try:
-            results.append(_to_response(calculate_max_gain(_to_domain(coupon))))
-        except CouponError as exc:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Kupon #{index}: {exc}"
-            ) from exc
+            results.append(_compute(coupon))
+        except HTTPException as exc:
+            raise HTTPException(HTTP_422, detail=f"Kupon #{index}: {exc.detail}") from exc
     return results
+
+
+@router.get(
+    "/odd-types",
+    response_model=list[OddTypeOut],
+    summary="Tanımlı oddTypeId kataloğu",
+    tags=["katalog"],
+)
+def odd_types() -> list[OddTypeOut]:
+    """Hangi ``oddTypeId``'nin hangi piyasaya karşılık geldiğini listeler.
+
+    Katalogda olmayan bir id kupona gelirse istek reddedilmez; aynı id'nin
+    seçimleri dışlayıcı, farklı id'ler bağımsız kabul edilir ve yanıtın
+    ``warnings`` alanında bildirilir.
+    """
+    return [OddTypeOut(**row) for row in catalog()]
 
 
 @router.get("/health", summary="Sağlık kontrolü", tags=["ops"])

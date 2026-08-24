@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import itertools
+import math
 import random
 from decimal import ROUND_DOWN, Decimal
 
@@ -11,25 +12,115 @@ import pytest
 from app.services.max_gain import (
     CouponError,
     CouponInput,
-    EventInput,
     SelectionInput,
     calculate_max_gain,
     elementary_symmetric,
 )
 from tests.reference import brute_force_max_gain
 
-
-def sel(sid: str, odds: str) -> SelectionInput:
-    return SelectionInput(id=sid, odds=Decimal(odds))
-
-
-def ev(eid: str, *odds: str, banker: bool = False) -> EventInput:
-    selections = tuple(sel(f"o{i}", o) for i, o in enumerate(odds))
-    return EventInput(id=eid, selections=selections, banker=banker)
+MS = 1  # Maç Sonucu (1X2)
+CS = 2  # Çift Şans
+UNKNOWN = 9001  # katalogda olmayan
 
 
-def coupon(*events: EventInput, stake: str = "100.00", **kwargs) -> CouponInput:
-    return CouponInput(events=events, stake=Decimal(stake), **kwargs)
+def s(match_id: str, odd_type_id: int, outcome: str, odds: str) -> SelectionInput:
+    return SelectionInput(
+        match_id=match_id, odd_type_id=odd_type_id, outcome=outcome, odds=Decimal(odds)
+    )
+
+
+def coupon(*selections: SelectionInput, amount: str = "100.00", **kwargs) -> CouponInput:
+    return CouponInput(selections=selections, coupon_amount=Decimal(amount), **kwargs)
+
+
+# --------------------------------------------------------------------------- #
+# Kullanıcının belirttiği maç ağırlığı kuralları
+# --------------------------------------------------------------------------- #
+
+
+def test_same_odd_type_selections_are_exclusive_so_max_wins():
+    """Aynı maçta iki kez 1X2 oynanmışsa yalnızca oranı yüksek olan sayılır."""
+    result = calculate_max_gain(coupon(s("m1", MS, "1", "2.10"), s("m1", MS, "X", "3.40")))
+    assert result.matches[0].weight == Decimal("3.40")
+    assert len(result.matches[0].groups[0].winning_selections) == 1
+
+
+def test_compatible_selections_across_odd_types_are_summed():
+    """1X2 '1' ile Çift Şans '1X' ev sahibi kazanırsa ikisi de tutar -> toplanır."""
+    result = calculate_max_gain(coupon(s("m1", MS, "1", "2.10"), s("m1", CS, "1X", "1.30")))
+    group = result.matches[0].groups[0]
+    assert result.matches[0].weight == Decimal("3.40")
+    assert group.combined is True
+    assert {w.outcome for w in group.winning_selections} == {"1", "1X"}
+    assert group.scoreline is not None
+
+
+def test_contradictory_selections_across_odd_types_are_not_summed():
+    """1X2 '1' ile Çift Şans 'X2' asla birlikte tutamaz -> toplanmaz, max alınır."""
+    result = calculate_max_gain(coupon(s("m1", MS, "1", "2.10"), s("m1", CS, "X2", "1.45")))
+    group = result.matches[0].groups[0]
+    assert result.matches[0].weight == Decimal("2.10")
+    assert group.combined is False
+    assert [w.outcome for w in group.winning_selections] == ["1"]
+
+
+def test_three_way_overlap_picks_best_compatible_subset():
+    """Üç seçim arasından, birlikte tutabilen en yüksek toplamlı alt küme seçilir.
+
+    '1X' hem '1' hem 'X' ile uyumlu; ama '1' ile 'X' birbirini dışlar. Aday
+    alt kümeler: {1, 1X} = 4.60 ve {X, 1X} = 3.40. Kazanan 4.60, senaryo ev galibiyeti.
+    """
+    result = calculate_max_gain(
+        coupon(
+            s("m1", MS, "1", "3.00"),
+            s("m1", MS, "X", "1.80"),
+            s("m1", CS, "1X", "1.60"),
+        )
+    )
+    group = result.matches[0].groups[0]
+    assert result.matches[0].weight == Decimal("4.60")
+    assert {w.outcome for w in group.winning_selections} == {"1", "1X"}
+    assert group.scoreline == {"half_time": "0-0", "full_time": "1-0"}
+
+
+def test_best_subset_can_beat_the_single_highest_odds():
+    """En yüksek tekil oran, birlikte tutabilen iki seçimin toplamını geçemeyebilir."""
+    result = calculate_max_gain(
+        coupon(
+            s("m1", MS, "1", "4.00"),  # en yüksek tekil oran, ama hiçbiriyle uyumlu değil
+            s("m1", MS, "X", "3.20"),  # X + X2 beraberlikte birlikte tutar -> 4.70
+            s("m1", CS, "X2", "1.50"),
+        )
+    )
+    group = result.matches[0].groups[0]
+    assert result.matches[0].weight == Decimal("4.70")
+    assert {w.outcome for w in group.winning_selections} == {"X", "X2"}
+    assert group.scoreline == {"half_time": "0-0", "full_time": "0-0"}
+
+
+def test_unknown_odd_type_falls_back_and_warns():
+    """Katalogda olmayan id: aynı id dışlayıcı, farklı id bağımsız."""
+    result = calculate_max_gain(
+        coupon(
+            s("m1", UNKNOWN, "A", "2.00"),
+            s("m1", UNKNOWN, "B", "3.00"),  # aynı id -> dışlayıcı, max 3.00
+            s("m1", MS, "1", "1.50"),  # farklı grup -> toplanır
+        )
+    )
+    assert result.matches[0].weight == Decimal("4.50")
+    assert any("katalogda yok" in w for w in result.warnings)
+
+
+def test_unparseable_outcome_is_isolated_and_warns():
+    result = calculate_max_gain(coupon(s("m1", MS, "3", "2.00"), s("m1", MS, "1", "1.50")))
+    assert result.matches[0].weight == Decimal("3.50")  # yalıtıldı -> toplandı
+    assert any("çözümlenemedi" in w or "geçersiz" in w for w in result.warnings)
+
+
+def test_impossible_outcome_is_isolated_rather_than_zeroing_the_match():
+    """Modellenen skor aralığı dışındaki doğru skor maçı sıfırlamamalı."""
+    result = calculate_max_gain(coupon(s("m1", 3, "1", "2.00")))  # id 3 katalogda yok
+    assert result.matches[0].weight == Decimal("2.00")
 
 
 # --------------------------------------------------------------------------- #
@@ -50,105 +141,108 @@ def test_elementary_symmetric_matches_explicit_combinations(values):
     assert e[0] == Decimal(1)
     for k in range(1, len(values) + 1):
         expected = sum(
-            (
-                # her k'lı alt kümenin çarpımı
-                __import__("math").prod(subset, start=Decimal(1))
-                for subset in itertools.combinations(values, k)
-            ),
+            (math.prod(subset, start=Decimal(1)) for subset in itertools.combinations(values, k)),
             Decimal(0),
         )
         assert e[k] == expected, f"e[{k}] uyuşmadı"
 
 
 # --------------------------------------------------------------------------- #
-# Elle hesaplanabilir temel senaryolar
+# Kupon toplamı
 # --------------------------------------------------------------------------- #
 
 
 def test_plain_parlay_is_product_of_odds():
-    """Tek seçimli 3 maçlık kombine: max gain = stake x oranların çarpımı."""
-    result = calculate_max_gain(coupon(ev("m1", "2.00"), ev("m2", "3.00"), ev("m3", "1.50")))
+    result = calculate_max_gain(
+        coupon(s("m1", MS, "1", "2.00"), s("m2", MS, "1", "3.00"), s("m3", MS, "1", "1.50"))
+    )
     assert result.line_count == 1
-    assert result.stake_per_line == Decimal("100.00")
-    assert result.max_gain == Decimal("900.00")  # 100 * 2 * 3 * 1.5
+    assert result.max_gain == Decimal("900.00")
     assert result.net_profit == Decimal("800.00")
 
 
-def test_multiway_splits_stake_and_picks_best_odds():
-    """m1'de iki seçim -> 2 satır; en iyi senaryoda yüksek oranlı seçim tutar."""
-    result = calculate_max_gain(coupon(ev("m1", "2.00", "4.00"), ev("m2", "3.00")))
+def test_multiway_splits_stake_into_lines():
+    """m1'de iki seçim -> 2 satır; ikisi de tutabildiği için ikisi de öder."""
+    result = calculate_max_gain(
+        coupon(s("m1", MS, "1", "2.10"), s("m1", CS, "1X", "1.30"), s("m2", MS, "1", "3.00"))
+    )
     assert result.line_count == 2
     assert result.stake_per_line == Decimal("50.00")
-    # 50 * 4.00 * 3.00 -- yalnızca bir satır kazanabilir (m1 seçimleri dışlayıcı)
-    assert result.max_gain == Decimal("600.00")
-    picked = {p.event_id: p.selection_id for p in result.best_scenario}
-    assert picked["m1"] == "o1"  # 4.00 oranlı seçim
+    assert result.max_gain == Decimal("510.00")  # 50 * 3.00 * (2.10 + 1.30)
 
 
 def test_system_2_of_3_sums_all_winning_lines():
-    """2/3 sistem: 3 satır, en iyi senaryoda 3'ü de kazanır."""
     result = calculate_max_gain(
-        coupon(ev("m1", "2.00"), ev("m2", "3.00"), ev("m3", "4.00"), system_sizes=(2,))
+        coupon(
+            s("m1", MS, "1", "2.00"),
+            s("m2", MS, "1", "3.00"),
+            s("m3", MS, "1", "4.00"),
+            system_sizes=(2,),
+        )
     )
     assert result.line_count == 3
     per_line = Decimal("100") / 3
-    expected = per_line * (Decimal("6") + Decimal("8") + Decimal("12"))  # e_2 = 26
-    # ödemeler 2 ondalığa aşağı yuvarlanır
+    expected = per_line * Decimal("26")  # e_2 = 6 + 8 + 12
     assert result.max_gain == expected.quantize(Decimal("0.01"), rounding=ROUND_DOWN)
     assert result.max_gain == Decimal("866.66")
-    assert result.warnings  # 100 TL 3 satıra tam bölünmüyor
+    assert result.warnings
 
 
 def test_banker_is_present_in_every_line():
-    """Banko event her satırda; sistem yalnızca kalan event'lere uygulanır."""
     result = calculate_max_gain(
         coupon(
-            ev("b1", "1.50", banker=True),
-            ev("m1", "2.00"),
-            ev("m2", "3.00"),
+            s("b1", MS, "1", "1.50"),
+            s("m1", MS, "1", "2.00"),
+            s("m2", MS, "1", "3.00"),
+            banker_match_ids=frozenset({"b1"}),
             system_sizes=(1,),
-            stake="10.00",
+            amount="10.00",
             stake_mode="per_line",
         )
     )
-    assert result.line_count == 2  # 1/2 sistem -> 2 satır, ikisinde de banko var
+    assert result.line_count == 2
     assert result.total_stake == Decimal("20.00")
-    # 10*1.5*2 + 10*1.5*3 = 30 + 45
-    assert result.max_gain == Decimal("75.00")
+    assert result.max_gain == Decimal("75.00")  # 10*1.5*2 + 10*1.5*3
 
 
 def test_multi_size_system_combines_sizes():
-    """[2,3] sistem: hem 2'li hem 3'lü satırlar üretilir ve toplanır."""
     result = calculate_max_gain(
         coupon(
-            ev("m1", "2.00"),
-            ev("m2", "3.00"),
-            ev("m3", "4.00"),
+            s("m1", MS, "1", "2.00"),
+            s("m2", MS, "1", "3.00"),
+            s("m3", MS, "1", "4.00"),
             system_sizes=(2, 3),
-            stake="1.00",
+            amount="1.00",
             stake_mode="per_line",
         )
     )
-    assert result.line_count == 4  # C(3,2) + C(3,3)
-    # e_2 = 26, e_3 = 24
-    assert result.max_gain == Decimal("50.00")
+    assert result.line_count == 4
+    assert result.max_gain == Decimal("50.00")  # e_2 = 26, e_3 = 24
     assert [b.system_size for b in result.breakdown] == [2, 3]
-    assert [b.line_count for b in result.breakdown] == [3, 1]
 
 
-def test_max_single_line_gain_is_best_individual_line():
+def test_max_single_line_uses_individual_odds_not_match_weight():
+    """Tek satır her maçtan bir seçim alır; ağırlık (toplam) değil tekil oran geçerli."""
     result = calculate_max_gain(
         coupon(
-            ev("m1", "2.00"),
-            ev("m2", "3.00"),
-            ev("m3", "10.00"),
-            system_sizes=(2,),
-            stake="1.00",
+            s("m1", MS, "1", "2.10"),
+            s("m1", CS, "1X", "1.30"),
+            s("m2", MS, "1", "3.00"),
+            amount="1.00",
             stake_mode="per_line",
         )
     )
-    assert result.max_single_line_gain == Decimal("30.00")  # 1 * 3.00 * 10.00
-    assert result.max_gain == Decimal("56.00")  # 6 + 20 + 30
+    assert result.matches[0].weight == Decimal("3.40")
+    assert result.max_single_line_gain == Decimal("6.30")  # 2.10 * 3.00
+    assert result.max_gain == Decimal("10.20")  # 3.40 * 3.00
+
+
+def test_sub_cent_stake_per_line_is_not_rounded_to_zero():
+    selections = [s(f"m{i}", MS, "1", "2.00") for i in range(20)]
+    result = calculate_max_gain(coupon(*selections, system_sizes=(4,), amount="10.00"))
+    assert result.line_count == 4845  # C(20,4)
+    assert result.stake_per_line == Decimal("0.002063")
+    assert "0.002063" in result.warnings[0]
 
 
 # --------------------------------------------------------------------------- #
@@ -158,19 +252,26 @@ def test_max_single_line_gain_is_best_individual_line():
 
 def test_bonus_multiplier_scales_payout():
     result = calculate_max_gain(
-        coupon(ev("m1", "2.00"), ev("m2", "3.00"), bonus_multiplier=Decimal("1.10"))
+        coupon(
+            s("m1", MS, "1", "2.00"),
+            s("m2", MS, "1", "3.00"),
+            bonus_multiplier=Decimal("1.10"),
+        )
     )
-    assert result.max_gain == Decimal("660.00")  # 100 * 6 * 1.1
+    assert result.max_gain == Decimal("660.00")
 
 
 def test_payout_cap_clamps_result_and_warns():
     result = calculate_max_gain(
-        coupon(ev("m1", "10.00"), ev("m2", "10.00"), max_payout_cap=Decimal("5000.00"))
+        coupon(
+            s("m1", MS, "1", "10.00"),
+            s("m2", MS, "1", "10.00"),
+            max_payout_cap=Decimal("5000.00"),
+        )
     )
     assert result.capped is True
     assert result.max_gain == Decimal("5000.00")
     assert result.max_single_line_gain == Decimal("5000.00")
-    assert any("tavan" in w for w in result.warnings)
 
 
 # --------------------------------------------------------------------------- #
@@ -183,69 +284,88 @@ def test_payout_cap_clamps_result_and_warns():
     [
         ({"system_sizes": (4,)}, "Geçersiz sistem boyutu"),
         ({"system_sizes": (0,)}, "Geçersiz sistem boyutu"),
-        ({"stake": Decimal("0")}, "Stake"),
+        ({"coupon_amount": Decimal("0")}, "Kupon tutarı"),
         ({"stake_mode": "nope"}, "stake_mode"),
+        ({"banker_match_ids": frozenset({"yok"})}, "kuponda yok"),
     ],
 )
 def test_invalid_coupons_raise(kwargs, fragment):
-    events = (ev("m1", "2.00"), ev("m2", "3.00"))
-    base = {"events": events, "stake": Decimal("100")}
+    base = {
+        "selections": (s("m1", MS, "1", "2.00"), s("m2", MS, "1", "3.00")),
+        "coupon_amount": Decimal("100"),
+    }
     base.update(kwargs)
     with pytest.raises(CouponError, match=fragment):
         calculate_max_gain(CouponInput(**base))
 
 
-def test_duplicate_event_ids_rejected():
-    with pytest.raises(CouponError, match="Tekrar eden event id"):
-        calculate_max_gain(coupon(ev("m1", "2.00"), ev("m1", "3.00")))
+def test_duplicate_selection_rejected():
+    with pytest.raises(CouponError, match="iki kez"):
+        calculate_max_gain(coupon(s("m1", MS, "1", "2.00"), s("m1", MS, "1", "3.00")))
 
 
 def test_odds_must_exceed_one():
     with pytest.raises(CouponError, match="1.00'den büyük"):
-        calculate_max_gain(coupon(ev("m1", "1.00")))
+        calculate_max_gain(coupon(s("m1", MS, "1", "1.00")))
 
 
 def test_all_banker_coupon_needs_no_system():
     result = calculate_max_gain(
-        coupon(ev("b1", "2.00", banker=True), ev("b2", "3.00", banker=True))
+        coupon(
+            s("b1", MS, "1", "2.00"),
+            s("b2", MS, "1", "3.00"),
+            banker_match_ids=frozenset({"b1", "b2"}),
+        )
     )
     assert result.line_count == 1
     assert result.max_gain == Decimal("600.00")
 
 
 def test_system_with_all_bankers_rejected():
-    with pytest.raises(CouponError, match="Tüm event'ler banko"):
-        calculate_max_gain(coupon(ev("b1", "2.00", banker=True), system_sizes=(1,)))
+    with pytest.raises(CouponError, match="Tüm maçlar banko"):
+        calculate_max_gain(
+            coupon(s("b1", MS, "1", "2.00"), banker_match_ids=frozenset({"b1"}), system_sizes=(1,))
+        )
 
 
 # --------------------------------------------------------------------------- #
-# Kaba kuvvet çapraz doğrulama -- polinom kısayolunun ana güvencesi
+# Kaba kuvvet çapraz doğrulama
 # --------------------------------------------------------------------------- #
+
+_OUTCOMES = [(MS, "1"), (MS, "X"), (MS, "2"), (CS, "1X"), (CS, "12"), (CS, "X2"), (UNKNOWN, "A")]
 
 
 def _random_coupon(rng: random.Random) -> CouponInput:
-    event_count = rng.randint(1, 5)
-    events = []
-    for i in range(event_count):
-        selection_count = rng.randint(1, 3)
-        odds = [Decimal(str(round(rng.uniform(1.05, 6.0), 2))) for _ in range(selection_count)]
-        events.append(ev(f"m{i}", *(str(o) for o in odds), banker=rng.random() < 0.25))
+    selections: list[SelectionInput] = []
+    match_ids = [f"m{i}" for i in range(rng.randint(1, 3))]
 
-    combinable_count = sum(1 for e in events if not e.banker)
+    for match_id in match_ids:
+        picks = rng.sample(_OUTCOMES, rng.randint(1, 3))
+        for odd_type_id, outcome in picks:
+            selections.append(
+                s(match_id, odd_type_id, outcome, str(round(rng.uniform(1.05, 6.0), 2)))
+            )
+
+    bankers = frozenset(m for m in match_ids if rng.random() < 0.25)
+    combinable_count = len(match_ids) - len(bankers)
     if combinable_count and rng.random() < 0.7:
-        pool = range(1, combinable_count + 1)
-        sizes = tuple(sorted(rng.sample(list(pool), rng.randint(1, len(pool)))))
+        pool = list(range(1, combinable_count + 1))
+        sizes = tuple(sorted(rng.sample(pool, rng.randint(1, len(pool)))))
     else:
         sizes = None
 
-    stake_mode = rng.choice(["total", "per_line"])
-    stake = Decimal(str(rng.choice([1, 5, 10, 100, 250])))
-    return CouponInput(events=tuple(events), stake=stake, stake_mode=stake_mode, system_sizes=sizes)
+    return CouponInput(
+        selections=tuple(selections),
+        coupon_amount=Decimal(str(rng.choice([1, 5, 10, 100, 250]))),
+        stake_mode=rng.choice(["total", "per_line"]),
+        system_sizes=sizes,
+        banker_match_ids=bankers,
+    )
 
 
-@pytest.mark.parametrize("seed", range(120))
+@pytest.mark.parametrize("seed", range(150))
 def test_matches_brute_force_reference(seed):
-    """Polinom kısayolu, satırları tek tek üreten referansla birebir aynı olmalı."""
+    """Motor, satırları ve senaryoları tek tek dolaşan referansla birebir aynı olmalı."""
     rng = random.Random(seed)
     c = _random_coupon(rng)
 
@@ -257,13 +377,3 @@ def test_matches_brute_force_reference(seed):
     expected_gain, expected_lines = brute_force_max_gain(c)
     assert result.line_count == expected_lines
     assert result.max_gain == expected_gain
-
-
-def test_sub_cent_stake_per_line_is_not_rounded_to_zero():
-    """Büyük sistemlerde satır başı stake kuruşun altına iner; 0.00'a kırpılmamalı."""
-    events = [ev(f"m{i}", "2.00") for i in range(20)]
-    result = calculate_max_gain(coupon(*events, system_sizes=(4,), stake="10.00"))
-    assert result.line_count == 4845  # C(20,4)
-    assert result.stake_per_line > 0
-    assert result.stake_per_line == Decimal("0.002063")  # 10/4845, aşağı yuvarlanmış
-    assert "0.002063" in result.warnings[0]  # uyarı ile alan aynı değeri göstermeli

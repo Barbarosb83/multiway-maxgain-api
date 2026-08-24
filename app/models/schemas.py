@@ -1,4 +1,8 @@
-"""API istek/yanıt şemaları (Pydantic v2)."""
+"""API istek/yanıt şemaları (Pydantic v2).
+
+JSON tarafında alan adları camelCase'tir (``matchId``, ``oddTypeId``,
+``couponAmount``); snake_case gövdeler de kabul edilir.
+"""
 
 from __future__ import annotations
 
@@ -6,88 +10,74 @@ from decimal import Decimal
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic.alias_generators import to_camel
 
-MAX_EVENTS = 50
-MAX_SELECTIONS_PER_EVENT = 20
+from app.services.max_gain import MAX_MATCHES, MAX_SELECTIONS_PER_MATCH
 
 Odds = Annotated[Decimal, Field(gt=1, le=Decimal("100000"), decimal_places=4)]
 Money = Annotated[Decimal, Field(gt=0, le=Decimal("100000000"), decimal_places=2)]
+MatchId = Annotated[str | int, Field(union_mode="left_to_right")]
 
 
-class SelectionIn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class Base(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
-    id: str = Field(
-        min_length=1, max_length=64, description="Seçim (outcome) kimliği, ör. '1', 'X', 'over_2_5'"
+
+class StrictBase(Base):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+
+
+# --------------------------------------------------------------------------- #
+# İstek
+# --------------------------------------------------------------------------- #
+
+
+class SelectionIn(StrictBase):
+    match_id: MatchId = Field(description="Maç kimliği; aynı maça birden fazla seçim gelebilir")
+    odd_type_id: int = Field(ge=0, description="Piyasa kimliği; katalog için GET /api/v1/odd-types")
+    outcome: str = Field(
+        min_length=1, max_length=64, description="Sonuç kodu, ör. '1', 'X2', '2.5 Üst', '2-1'"
     )
     odds: Odds = Field(description="Ondalık oran; 1.00'den büyük olmalı")
-    name: str | None = Field(default=None, max_length=200, description="İnsan okunur seçim adı")
 
 
-class EventIn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: str = Field(min_length=1, max_length=64, description="Event (maç) kimliği")
-    selections: list[SelectionIn] = Field(
-        min_length=1,
-        max_length=MAX_SELECTIONS_PER_EVENT,
-        description="Bu event için işaretlenen, birbirini dışlayan seçimler",
-    )
-    name: str | None = Field(default=None, max_length=200)
-    banker: bool = Field(
-        default=False, description="True ise bu event her satırda zorunlu yer alır"
-    )
-
-
-class SystemIn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class SystemIn(StrictBase):
     sizes: list[int] = Field(
         min_length=1,
-        max_length=MAX_EVENTS,
+        max_length=MAX_MATCHES,
         description="Sistem boyutları, ör. [3] => 3'lü sistem, [2,3] => 2/N + 3/N",
     )
 
 
-class CouponIn(BaseModel):
+class CouponIn(StrictBase):
     model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
         extra="forbid",
         json_schema_extra={
             "examples": [
                 {
-                    "stake": "100.00",
-                    "stake_mode": "total",
+                    "couponAmount": "100.00",
+                    "stakeMode": "total",
                     "currency": "TRY",
                     "system": {"sizes": [2]},
-                    "events": [
-                        {
-                            "id": "m1",
-                            "name": "Galatasaray - Fenerbahçe",
-                            "selections": [
-                                {"id": "1", "name": "MS 1", "odds": "2.10"},
-                                {"id": "X", "name": "MS X", "odds": "3.40"},
-                            ],
-                        },
-                        {
-                            "id": "m2",
-                            "name": "Beşiktaş - Trabzonspor",
-                            "selections": [{"id": "2", "name": "MS 2", "odds": "2.75"}],
-                        },
-                        {
-                            "id": "m3",
-                            "name": "Real Madrid - Barcelona",
-                            "banker": True,
-                            "selections": [{"id": "1", "name": "MS 1", "odds": "1.90"}],
-                        },
+                    "bankerMatchIds": [903],
+                    "selections": [
+                        {"matchId": 901, "oddTypeId": 1, "outcome": "1", "odds": "2.10"},
+                        {"matchId": 901, "oddTypeId": 2, "outcome": "1X", "odds": "1.30"},
+                        {"matchId": 902, "oddTypeId": 1, "outcome": "2", "odds": "2.75"},
+                        {"matchId": 903, "oddTypeId": 1, "outcome": "1", "odds": "1.90"},
                     ],
                 }
             ]
         },
     )
 
-    events: list[EventIn] = Field(min_length=1, max_length=MAX_EVENTS)
-    stake: Money = Field(
-        description="Yatırılan tutar; stake_mode alanı nasıl yorumlanacağını belirler"
+    selections: list[SelectionIn] = Field(
+        min_length=1, max_length=MAX_MATCHES * MAX_SELECTIONS_PER_MATCH
+    )
+    coupon_amount: Money = Field(
+        description="Kupon tutarı; stakeMode alanı bunun nasıl yorumlanacağını belirler"
     )
     stake_mode: Literal["total", "per_line"] = Field(
         default="total",
@@ -97,14 +87,13 @@ class CouponIn(BaseModel):
         ),
     )
     system: SystemIn | None = Field(
-        default=None,
-        description="Verilmezse tam kombine (tüm banko olmayan event'ler tek satırda) varsayılır",
+        default=None, description="Verilmezse tam kombine (tüm banko olmayan maçlar) varsayılır"
+    )
+    banker_match_ids: list[MatchId] = Field(
+        default_factory=list, description="Her satırda zorunlu yer alacak maçların kimlikleri"
     )
     bonus_multiplier: Decimal | None = Field(
-        default=None,
-        gt=0,
-        le=Decimal("100"),
-        description="Kupon bonusu çarpanı, ör. 1.10 => %10 bonus",
+        default=None, gt=0, le=Decimal("100"), description="Kupon bonusu çarpanı, ör. 1.10"
     )
     max_payout_cap: Money | None = Field(
         default=None, description="Bahis şirketinin maksimum ödeme tavanı"
@@ -112,39 +101,76 @@ class CouponIn(BaseModel):
     currency: str = Field(default="TRY", min_length=3, max_length=3, pattern=r"^[A-Za-z]{3}$")
 
     @model_validator(mode="after")
-    def _check_ids_unique(self) -> CouponIn:
-        event_ids = [e.id for e in self.events]
-        duplicates = {i for i in event_ids if event_ids.count(i) > 1}
-        if duplicates:
-            raise ValueError(f"Tekrar eden event id: {sorted(duplicates)}")
-        for event in self.events:
-            selection_ids = [s.id for s in event.selections]
-            dupes = {i for i in selection_ids if selection_ids.count(i) > 1}
-            if dupes:
-                raise ValueError(f"{event.id!r} event'inde tekrar eden seçim id: {sorted(dupes)}")
+    def _check_selections_unique(self) -> CouponIn:
+        seen: set[tuple[str, int, str]] = set()
+        for selection in self.selections:
+            key = (
+                str(selection.match_id),
+                selection.odd_type_id,
+                selection.outcome.strip().upper(),
+            )
+            if key in seen:
+                raise ValueError(
+                    f"Aynı seçim iki kez gönderildi: maç {selection.match_id}, "
+                    f"oddType {selection.odd_type_id}, outcome {selection.outcome!r}."
+                )
+            seen.add(key)
+
+        match_ids = {str(s.match_id) for s in self.selections}
+        missing = {str(m) for m in self.banker_match_ids} - match_ids
+        if missing:
+            raise ValueError(f"Banko olarak işaretlenen maçlar kuponda yok: {sorted(missing)}")
         return self
 
 
-class BestPickOut(BaseModel):
-    event_id: str
-    event_name: str | None = None
-    selection_id: str
-    selection_name: str | None = None
+# --------------------------------------------------------------------------- #
+# Yanıt
+# --------------------------------------------------------------------------- #
+
+
+class ScorelineOut(Base):
+    half_time: str = Field(description="En iyi senaryodaki ilk yarı skoru")
+    full_time: str = Field(description="En iyi senaryodaki maç sonu skoru")
+
+
+class WinningSelectionOut(Base):
+    odd_type_id: int
+    odd_type_name: str
+    outcome: str
     odds: Decimal
+
+
+class GroupResolutionOut(Base):
+    group: str = Field(description="Kısıt grubu; aynı gruptaki seçimler birbirini kısıtlar")
+    odds_sum: Decimal = Field(description="Bu grubun maç ağırlığına katkısı")
+    combined: bool = Field(description="True ise bu grupta birden fazla seçim aynı anda kazanıyor")
+    winning_selections: list[WinningSelectionOut]
+    scoreline: ScorelineOut | None = Field(
+        default=None, description="Grubu gerçekleyen örnek skor (yalnızca gol bazlı piyasalarda)"
+    )
+
+
+class MatchResolutionOut(Base):
+    match_id: str | int
     banker: bool
+    selection_count: int = Field(description="Bu maç için gelen seçim sayısı (satır çarpanı)")
+    weight: Decimal = Field(
+        description="Maçın en iyi senaryodaki ağırlığı: uyumlu seçimlerin oran toplamı"
+    )
+    groups: list[GroupResolutionOut]
 
 
-class SizeBreakdownOut(BaseModel):
+class SizeBreakdownOut(Base):
     system_size: int
     line_count: int
     gross_gain: Decimal
 
 
-class StakeOut(BaseModel):
+class StakeOut(Base):
     total: Decimal = Field(description="Kuponun toplam maliyeti")
     per_line: Decimal = Field(
         description=(
-            "Toplam stake'in satır sayısına bölünmüş hâli. Ödenen bir tutar değil, "
+            "Kupon tutarının satır sayısına bölünmüş hâli. Ödenen bir tutar değil, "
             "türetilmiş bir bölüşüm oranıdır; büyük sistemlerde kuruşun altına "
             "inebildiği için 6 ondalık hassasiyetle döner."
         )
@@ -152,21 +178,28 @@ class StakeOut(BaseModel):
     line_count: int = Field(description="Kuponun açıldığı toplam satır (way) sayısı")
 
 
-class MaxGainOut(BaseModel):
+class MaxGainOut(Base):
     currency: str
     stake: StakeOut
     max_gain: Decimal = Field(description="En iyi senaryoda kazanan tüm satırların toplam ödemesi")
-    net_profit: Decimal = Field(description="max_gain - toplam stake")
+    net_profit: Decimal = Field(description="maxGain - toplam stake")
     max_single_line_gain: Decimal = Field(
         description="Tek bir satırdan gelebilecek en yüksek ödeme"
     )
-    effective_multiplier: Decimal = Field(description="max_gain / toplam stake")
+    effective_multiplier: Decimal = Field(description="maxGain / toplam stake")
     capped: bool = Field(description="Ödeme tavanı uygulandıysa true")
-    best_scenario: list[BestPickOut]
+    matches: list[MatchResolutionOut]
     breakdown: list[SizeBreakdownOut]
     warnings: list[str] = Field(default_factory=list)
 
 
-class ErrorOut(BaseModel):
+class OddTypeOut(Base):
+    odd_type_id: int
+    name: str
+    market_id: str
+    group: str
+    example_outcomes: list[str]
+
+
+class ErrorOut(Base):
     detail: str
-    code: str = "coupon_invalid"
