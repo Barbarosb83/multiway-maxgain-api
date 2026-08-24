@@ -488,6 +488,11 @@ def test_next_goal_market_stays_isolated(live_result):
     assert any("oddType 11 (live)" in w for w in live_result["warnings"])
 
 
+def test_live_selection_without_a_score_is_flagged(live_result):
+    """Canlı maçta anlık skor gelmezse maç sonu skoru kısıtlanamaz."""
+    assert any("anlık skor gönderilmemiş" in w for w in live_result["warnings"])
+
+
 def test_live_coupon_totals(live_result):
     assert live_result["stake"]["lineCount"] == 4
     assert live_result["maxGain"] == "459.02"
@@ -552,3 +557,148 @@ def test_rest_of_match_from_nil_nil_equals_full_time_result():
         },
     ).json()
     assert contradictory["matches"][0]["weight"] == "3.00"
+
+
+# --------------------------------------------------------------------------- #
+# Anlık skor kısıtı
+# --------------------------------------------------------------------------- #
+
+SCORED_LIVE_COUPON = [
+    {
+        "MatchId": -13996108,
+        "BetType": 1,
+        "OddsTypeId": 3,
+        "OutCome": "1",
+        "SpecialBetValue": "0:0",
+        "OddValue1": 2.05,
+        "Score": "0:0",
+    },
+    {
+        "MatchId": -13996108,
+        "BetType": 1,
+        "OddsTypeId": 11,
+        "OutCome": "2",
+        "SpecialBetValue": "0:0",
+        "OddValue1": 2.45,
+        "Score": "0:0",
+    },
+    {
+        "MatchId": -13996109,
+        "BetType": 1,
+        "OddsTypeId": 710,
+        "OutCome": "Under",
+        "SpecialBetValue": "3.5",
+        "OddValue1": 2.7,
+        "Score": "0:2",
+    },
+    {
+        "MatchId": -13996109,
+        "BetType": 1,
+        "OddsTypeId": 708,
+        "OutCome": "1",
+        "SpecialBetValue": "",
+        "OddValue1": 30,
+        "Score": "0:2",
+    },
+]
+
+
+def scored_request(*, with_score: bool) -> dict:
+    return {
+        "couponAmount": "100.00",
+        "selections": [
+            {
+                "matchId": row["MatchId"],
+                "isLive": row["BetType"],
+                "oddTypeId": row["OddsTypeId"],
+                "outcome": row["OutCome"],
+                "specialBetValue": row["SpecialBetValue"],
+                "odds": str(row["OddValue1"]),
+                **({"currentScore": row["Score"]} if with_score else {}),
+            }
+            for row in SCORED_LIVE_COUPON
+        ],
+    }
+
+
+def test_current_score_rules_out_an_unreachable_combination():
+    """0:2'den ev galibiyeti 3+ gol gerektirir; toplam 5'i geçer, '3.5 Alt' ile çelişir.
+
+    Skor gönderilmediğinde bu çelişki görülemez ve iki seçim toplanır.
+    """
+    without = client.post("/api/v1/coupons/max-gain", json=scored_request(with_score=False)).json()
+    with_score = client.post(
+        "/api/v1/coupons/max-gain", json=scored_request(with_score=True)
+    ).json()
+
+    utrecht_before = next(m for m in without["matches"] if m["matchId"] == -13996109)
+    utrecht_after = next(m for m in with_score["matches"] if m["matchId"] == -13996109)
+
+    assert utrecht_before["weight"] == "32.70"  # 2.70 + 30.00, çelişki görülmedi
+    assert utrecht_after["weight"] == "30.00"  # yalnızca ev galibiyeti
+    assert utrecht_after["groups"][0]["scoreline"]["fullTime"] == "3-2"
+
+    assert without["maxGain"] == "3678.75"
+    assert with_score["maxGain"] == "3375.00"
+
+
+def test_missing_score_on_a_live_selection_is_flagged():
+    body = client.post("/api/v1/coupons/max-gain", json=scored_request(with_score=False)).json()
+    assert sum("anlık skor gönderilmemiş" in w for w in body["warnings"]) == 2
+
+
+def test_selection_already_lost_is_dropped_with_a_warning():
+    """Maç 2-0 iken '1.5 Alt' artık kazanamaz; hesaba katılmamalı."""
+    payload = {
+        "couponAmount": "100.00",
+        "selections": [
+            {
+                "matchId": 1,
+                "isLive": 1,
+                "oddTypeId": 710,
+                "outcome": "Under",
+                "specialBetValue": "1.5",
+                "odds": "3.00",
+                "currentScore": "2:0",
+            },
+            {
+                "matchId": 1,
+                "isLive": 1,
+                "oddTypeId": 708,
+                "outcome": "1",
+                "odds": "1.50",
+                "currentScore": "2:0",
+            },
+        ],
+    }
+    body = client.post("/api/v1/coupons/max-gain", json=payload).json()
+    assert body["matches"][0]["weight"] == "1.50"
+    assert any("artık kazanamaz" in w for w in body["warnings"])
+
+
+def test_rest_of_match_falls_back_to_the_match_score():
+    """'Maçın kalanı' specialBetValue'suz gelirse maçın anlık skoru kullanılır."""
+    payload = {
+        "couponAmount": "100.00",
+        "selections": [
+            {
+                "matchId": 1,
+                "isLive": 1,
+                "oddTypeId": 3,
+                "outcome": "1",
+                "odds": "2.60",
+                "currentScore": "1:0",
+            },
+            {
+                "matchId": 1,
+                "isLive": 1,
+                "oddTypeId": 708,
+                "outcome": "2",
+                "odds": "1.50",
+                "currentScore": "1:0",
+            },
+        ],
+    }
+    body = client.post("/api/v1/coupons/max-gain", json=payload).json()
+    # 1:0'dan kalanı ev alırsa deplasman maçı kazanamaz -> çelişki
+    assert body["matches"][0]["weight"] == "2.60"

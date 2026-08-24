@@ -44,6 +44,7 @@ def _to_domain(payload: CouponIn) -> tuple[CouponInput, dict[str, str | int]]:
                 outcome=(selection.outcome or "").strip(),
                 odds=selection.odds,
                 is_live=selection.is_live,
+                current_score=selection.current_score,
                 special_bet_value=(
                     selection.special_bet_value.strip()
                     if selection.special_bet_value is not None

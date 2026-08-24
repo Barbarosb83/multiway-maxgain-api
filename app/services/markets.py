@@ -50,6 +50,8 @@ __all__ = [
     "get_space",
     "layout_fits",
     "mask_for",
+    "feasible_mask",
+    "parse_score",
     "required_bound",
     "describe_atom",
     "PERIOD_LABEL",
@@ -354,14 +356,20 @@ _AFFIRMATIVE = {"VAR", "YES", "Y", "EVET", "E", "KGVAR", "GOAL", "J", "JA", "SI"
 _NEGATIVE = {"YOK", "NO", "HAYIR", "H", "KGYOK", "NOGOAL", "N", "NEIN", "NON", "2"}
 
 
+def parse_score(text: str | None) -> tuple[int, int] | None:
+    """``"2:1"`` -> (2, 1). Çözümlenemezse None."""
+    match = _SCORE_RE.match(_norm(text))
+    return (int(match.group(1)), int(match.group(2))) if match else None
+
+
 def _current_score(special: str | None) -> tuple[int, int]:
     """``"0:0"`` -> (0, 0). Canlı piyasalarda bahis anındaki skor."""
-    match = _SCORE_RE.match(_norm(special))
-    if not match:
+    score = parse_score(special)
+    if score is None:
         raise UnknownOutcome(
             f"Anlık skor çözümlenemedi: specialBetValue={special!r} ('0:0' bekleniyor)"
         )
-    return int(match.group(1)), int(match.group(2))
+    return score
 
 
 def _rest_result() -> tuple[Builder, Bounder]:
@@ -738,6 +746,27 @@ def required_bound(
     else:
         needed = market.bound(outcome, special)
     return max(MIN_SCORE_BOUND, min(needed, MAX_SCORE_BOUND))
+
+
+@lru_cache(maxsize=256)
+def feasible_mask(space_key: tuple[str, int], home: int, away: int) -> int:
+    """Maç sonu skorunun anlık skordan küçük olamayacağını ifade eden maske.
+
+    Canlı bir maç 2-0 ise "1.5 Alt" artık kazanamaz; bu maske o seçimin hiçbir
+    atomla eşleşmemesini sağlar. Yalnızca maç sonu periyodu için anlamlıdır --
+    çeyrek ya da devre grupları anlık skorla doğrudan kısıtlanamaz.
+    """
+    space = get_space(*space_key)
+    if not home and not away:
+        return space.full_mask
+
+    accessor = _accessor(space.layout, "FT")
+    buffer = bytearray((len(space.atoms) + 7) // 8)
+    for index, atom in enumerate(space.atoms):
+        final_home, final_away = accessor(atom)
+        if final_home >= home and final_away >= away:
+            buffer[index >> 3] |= 1 << (index & 7)
+    return int.from_bytes(buffer, "little")
 
 
 @lru_cache(maxsize=8192)

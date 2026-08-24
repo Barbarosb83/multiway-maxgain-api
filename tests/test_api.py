@@ -140,7 +140,14 @@ def test_live_flag_selects_the_live_namespace():
         {
             "couponAmount": "100.00",
             "selections": [
-                {"matchId": 901, "oddTypeId": 24, "isLive": 1, "outcome": "1X", "odds": "1.40"}
+                {
+                    "matchId": 901,
+                    "oddTypeId": 24,
+                    "isLive": 1,
+                    "outcome": "1X",
+                    "odds": "1.40",
+                    "currentScore": "0:0",
+                }
             ],
         }
     )

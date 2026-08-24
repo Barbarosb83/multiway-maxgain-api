@@ -47,9 +47,11 @@ from app.services.markets import (
     MAX_SCORE_BOUND,
     UnknownOutcome,
     describe_atom,
+    feasible_mask,
     get_space,
     layout_fits,
     mask_for,
+    parse_score,
     required_bound,
 )
 from app.services.odd_types import OUTCOMES_BY_ODD_TYPE, resolve_odd_type, resolve_outcome
@@ -75,6 +77,8 @@ _STAKE_EXP = Decimal("0.000001")
 
 MAX_MATCHES = 50
 MAX_SELECTIONS_PER_MATCH = 12
+# Anlık skorun üstünde bırakılan hareket alanı (skor uzayı tavanı için).
+MIN_BOUND_HEADROOM = 4
 
 
 class CouponError(ValueError):
@@ -95,6 +99,7 @@ class SelectionInput:
     is_live: int = 0  # pre-match: 0, live: 1 -- hangi katalogda aranacağı
     special_bet_value: str | None = None  # eşik/handikap, ör. "2.5" veya "0:1"
     odd_id: int | None = None  # outcome katalogundaki tekil seçim kimliği
+    current_score: str | None = None  # canlı maçlarda o anki skor, ör. "2:1"
 
 
 @dataclass(frozen=True)
@@ -290,21 +295,57 @@ def _plan_space(periods: set[str], bound: int) -> tuple[str, bool]:
 
 
 def _solve_group(
-    entries: list[tuple[SelectionInput, int]], space_key: tuple[str, int], period: str
+    entries: list[tuple[SelectionInput, int]],
+    space_key: tuple[str, int],
+    period: str,
+    allowed: int,
 ) -> tuple[Decimal, list[SelectionInput], dict[str, str] | None]:
-    """Bir kısıt grubundaki en iyi uyumlu alt kümeyi çözer."""
+    """Bir kısıt grubundaki en iyi uyumlu alt kümeyi çözer.
+
+    ``allowed`` maçın anlık skoruyla hâlâ ulaşılabilir atomları sınırlar.
+    """
     space = get_space(*space_key)
     items = [(selection.odds, mask) for selection, mask in entries]
-    total, chosen, final_mask = _best_compatible_subset(items, space.full_mask)
+    total, chosen, final_mask = _best_compatible_subset(items, allowed)
     winners = [entries[index][0] for index in chosen]
-    scoreline = describe_atom(space, (final_mask & -final_mask).bit_length() - 1, period)
+    scoreline = (
+        describe_atom(space, (final_mask & -final_mask).bit_length() - 1, period)
+        if final_mask
+        else None
+    )
     return total, winners, scoreline
+
+
+def _match_current_score(
+    match_id: str, selections: list[SelectionInput], warnings: list[str]
+) -> tuple[int, int] | None:
+    """Maçın anlık skoru. Seçimler arasında tutarsızlık varsa ilki kullanılır."""
+    current: tuple[int, int] | None = None
+    for selection in selections:
+        parsed = parse_score(selection.current_score)
+        if parsed is None:
+            continue
+        if current is not None and current != parsed:
+            warnings.append(
+                f"Maç {match_id}: seçimler farklı anlık skor taşıyor "
+                f"({current[0]}:{current[1]} ve {parsed[0]}:{parsed[1]}); ilki kullanıldı."
+            )
+            continue
+        current = parsed
+
+    if current is None and any(selection.is_live for selection in selections):
+        warnings.append(
+            f"Maç {match_id}: canlı seçim var ama anlık skor gönderilmemiş; "
+            "maç sonu skoru kısıtlanamadı, çelişkiler eksik tespit edilebilir."
+        )
+    return current
 
 
 def _resolve_match(
     match_id: str, selections: list[SelectionInput], banker: bool, warnings: list[str]
 ) -> MatchResolution:
     """Bir maçtaki seçimleri kısıt gruplarına ayırıp ağırlığını hesaplar."""
+    current_score = _match_current_score(match_id, selections, warnings)
     resolved: list[_Resolved] = []
     isolated: OrderedDict[str, list[SelectionInput]] = OrderedDict()
 
@@ -327,10 +368,15 @@ def _resolve_match(
             continue
 
         siblings = tuple(OUTCOMES_BY_ODD_TYPE.get((selection.is_live, selection.odd_type_id), ()))
+        special = selection.special_bet_value
+        if not special and "REST" in info.market.id and current_score is not None:
+            # "Maçın kalanı" piyasası anlık skoru specialBetValue'da bekler;
+            # gelmemişse maçın skorundan doldurulur.
+            special = f"{current_score[0]}:{current_score[1]}"
+            selection = replace(selection, special_bet_value=special)
+
         try:
-            bound = required_bound(
-                info.market.id, selection.outcome, selection.special_bet_value, siblings
-            )
+            bound = required_bound(info.market.id, selection.outcome, special, siblings)
         except UnknownOutcome as exc:
             isolate(selection, f"{exc} Seçim yalıtılmış olarak değerlendirildi.")
             continue
@@ -348,9 +394,13 @@ def _resolve_match(
     groups: OrderedDict[str, list[tuple[SelectionInput, int]]] = OrderedDict()
     space_keys: dict[str, tuple[str, int]] = {}
     group_periods: dict[str, str] = {}
+    group_allowed: dict[str, int] = {}
 
     if resolved:
-        bound = _quantize_bound(max(item.bound for item in resolved))
+        needed = max(item.bound for item in resolved)
+        if current_score is not None:
+            needed = max(needed, max(current_score) + MIN_BOUND_HEADROOM)
+        bound = _quantize_bound(needed)
         periods = {item.period for item in resolved}
         kind, must_split = _plan_space(periods, bound)
 
@@ -376,6 +426,16 @@ def _resolve_match(
             space_key = ("MATCH" if must_split else kind, group_bound)
             name = "SCORE" if not period else f"SCORE:{period}"
 
+            # Anlık skor yalnızca maç sonu periyodunu kısıtlar; çeyrek ya da
+            # devre grupları ondan doğrudan etkilenmez.
+            covers_full_time = space_key[0] == "HALVES" or (period or "FT") == "FT"
+            allowed = (
+                feasible_mask(space_key, *current_score)
+                if current_score is not None and covers_full_time
+                else get_space(*space_key).full_mask
+            )
+            group_allowed[name] = allowed
+
             for item in items:
                 try:
                     mask = mask_for(
@@ -387,6 +447,14 @@ def _resolve_match(
                     )
                 except UnknownOutcome as exc:
                     isolate(item.selection, f"{exc} Seçim yalıtılmış olarak değerlendirildi.")
+                    continue
+                if mask and not (mask & allowed):
+                    warnings.append(
+                        f"Maç {match_id}: oddType {item.selection.odd_type_id} / "
+                        f"{item.selection.outcome!r} anlık skorla "
+                        f"({current_score[0]}:{current_score[1]}) artık kazanamaz; "
+                        "hesaba katılmadı."
+                    )
                     continue
                 if mask:
                     groups.setdefault(name, []).append((item.selection, mask))
@@ -406,7 +474,7 @@ def _resolve_match(
 
     for name, entries in groups.items():
         total, winners, scoreline = _solve_group(
-            entries, space_keys[name], group_periods.get(name, "FT")
+            entries, space_keys[name], group_periods.get(name, "FT"), group_allowed[name]
         )
         weight += total
         resolutions.append(_group_out(name, total, winners, scoreline))

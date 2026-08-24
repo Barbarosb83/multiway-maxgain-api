@@ -33,6 +33,7 @@ def s(
     odds: str,
     special: str | None = None,
     is_live: int = 0,
+    current_score: str | None = None,
 ) -> SelectionInput:
     return SelectionInput(
         match_id=match_id,
@@ -41,6 +42,7 @@ def s(
         odds=Decimal(odds),
         special_bet_value=special,
         is_live=is_live,
+        current_score=current_score,
     )
 
 
@@ -188,7 +190,7 @@ def test_large_bound_market_uses_a_wider_score_space():
 def test_live_and_pre_ids_are_separate_namespaces():
     """Aynı sayısal id, live ve pre kataloglarında farklı piyasalardır."""
     live = calculate_max_gain(
-        coupon(s("m1", 24, "1X", "1.40", is_live=1))
+        coupon(s("m1", 24, "1X", "1.40", is_live=1, current_score="0:0"))
     )  # live 24 = Double Chance
     assert live.matches[0].groups[0].winning_selections[0].odd_type_name == "Double Chance (ALL)"
     assert not live.warnings
@@ -489,7 +491,7 @@ def test_half_time_total_lines_resolve_through_odd_ids():
     # İY toplamı 1 olduğunda hem "1.5 alt" hem "0.5 üst" tutar
     compatible = calculate_max_gain(coupon(live(53, "1.60", "1.5"), live(54, "2.00", "0.5")))
     assert compatible.matches[0].weight == Decimal("3.60")
-    assert not compatible.warnings
+    assert all("anlık skor gönderilmemiş" in w for w in compatible.warnings)
 
     # "0.5 alt" (toplam 0) ile "1.5 üst" (toplam 2+) birlikte tutamaz
     contradictory = calculate_max_gain(coupon(live(53, "1.60", "0.5"), live(54, "2.00", "1.5")))

@@ -73,6 +73,15 @@ class SelectionIn(StrictBase):
         le=1,
         description="Event pre-match ise 0, live ise 1; oddTypeId o katalogda aranır.",
     )
+    current_score: str | None = Field(
+        default=None,
+        max_length=16,
+        pattern=r"^\s*\d+\s*[:-]\s*\d+\s*$",
+        description=(
+            "Maçın o anki skoru, ör. '0:2'. Canlı seçimlerde (isLive=1) gönderilmeli; "
+            "pre-match'te '0:0'dır. Maç sonu skorunun altına inemeyeceği kısıtını kurar."
+        ),
+    )
     special_bet_value: str | None = Field(
         default=None,
         max_length=32,

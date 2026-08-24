@@ -16,6 +16,7 @@ Kupon, düz bir **seçim listesi**dir. Her seçim şunları taşır:
 | `matchId` | Maç kimliği. Aynı maça **birden fazla** seçim gelebilir — "multiway". |
 | `isLive` | Event pre-match ise `0`, live ise `1`. Kimlikler bu bayrağa göre ilgili katalogda aranır. |
 | `oddId` | **Seçimin tekil kimliği.** Verildiğinde `oddTypeId` ve `outcome` katalogdan doldurulur. |
+| `currentScore` | Maçın o anki skoru (`"0:2"`). Canlı seçimlerde gönderilmeli; pre-match'te `"0:0"`. |
 | `specialBetValue` | Piyasaya göre değişir: Alt/Üst'te eşik (`"2.5"`), handikapta fark (`"0:1"`, `"-1.5"`), canlı "maçın kalanı"nda **bahis anındaki skor** (`"0:0"`). Gerektiren piyasalarda zorunlu. |
 | `odds` | Ondalık oran (`> 1.00`) |
 | `oddTypeId`, `outcome` | `oddId` yoksa zorunlu; varsa yok sayılır (tutarsızlık uyarı olarak bildirilir). |
@@ -68,6 +69,7 @@ Gerçek kupon gövdesindeki alanların karşılıkları:
 | `OddsTypeId` | `oddTypeId` | `isLive`'a göre ilgili katalogda aranır |
 | `OutCome` | `outcome` | `oddId` yoksa kullanılır; çok dilli tanınır |
 | `SpecialBetValue` | `specialBetValue` | Boş string (`""`) yokluk sayılır |
+| *(skor)* | `currentScore` | Gövdede yok; canlı maçlarda ayrıca gönderilmeli |
 | `OddValue1` | `odds` | Tam sayı gelebilir; en az iki ondalığa tamamlanır |
 | `Banko` | `bankerMatchIds` | `true` olan maçların kimlikleri |
 
@@ -230,6 +232,27 @@ piyasasıdır; ikisi de eşlenmiştir.
 sürede daha çok gol atandır. `specialBetValue` bahis anındaki skoru taşır ve maç sonu skorundan
 düşülür; maç sonunun anlık skorun altına inemeyeceği de kısıt olarak eklenir. Anlık skor `0:0`
 olduğunda piyasa maç sonucuyla aynıya indirgenir.
+
+### Anlık skor: neden ayrıca gerekli
+
+Canlı bir maçta o ana kadar atılan goller, maç sonu skorunun **alt sınırıdır**. Bu bilgi tek bir
+piyasadan (`live 3`, "maçın kalanı") gelemez, çünkü o piyasa her kuponda oynanmaz. Bu yüzden skor
+seçim düzeyinde `currentScore` olarak alınır ve o maçın tüm seçimlerine kısıt olarak uygulanır.
+
+Gerçek bir kupondan örnek — `Jong Utrecht` maçı **0:2**, kuponda `3.5 Alt` @2.70 ve
+`Maç Sonucu "1"` @30.00 var:
+
+| | Maç ağırlığı | Kupon max gain |
+|---|---|---|
+| Skor gönderilmeden | `2.70 + 30.00 = 32.70` | 3678.75 |
+| Skor `0:2` ile | `30.00` | **3375.00** |
+
+`0:2`'den ev sahibinin kazanması için 3+ gol atması gerekir; toplam en az 5 olur ve `3.5 Alt` ile
+çelişir. Skor olmadan bu görülemez ve iki seçim toplanır — %9 fazla hesap.
+
+Aynı kısıt, **zaten kaybetmiş** seçimleri de eler: maç 2-0 iken `1.5 Alt` hiçbir senaryoda
+kazanamaz, hesaba katılmaz ve `warnings` ile bildirilir. Canlı bir seçim skorsuz gelirse bu da
+uyarı olarak döner.
 
 **Gol sırasına bağlı piyasalar** (`live 11`, "Next goal") bilerek eşlenmemiştir: hangi takımın
 *sıradaki* golü attığı maç sonu skorundan çıkarılamaz. Yalıtılmış kalırlar, yani sonuçtan bağımsız
