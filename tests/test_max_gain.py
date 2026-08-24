@@ -465,3 +465,48 @@ def test_matches_brute_force_reference(seed):
     expected_gain, expected_lines = brute_force_max_gain(c)
     assert result.line_count == expected_lines
     assert result.max_gain == expected_gain
+
+
+# --------------------------------------------------------------------------- #
+# Katalogdaki hatalı outcome kayıtları
+# --------------------------------------------------------------------------- #
+
+
+def test_half_time_total_lines_resolve_through_odd_ids():
+    """live 19 (İlk Yarı Alt/Üst): oddId 53 = 'u', 54 = 'o'."""
+
+    def live(odd_id: str, odds: str, special: str) -> SelectionInput:
+        return SelectionInput(
+            match_id="m1",
+            odd_type_id=0,
+            outcome="",
+            odds=Decimal(odds),
+            odd_id=odd_id,
+            is_live=1,
+            special_bet_value=special,
+        )
+
+    # İY toplamı 1 olduğunda hem "1.5 alt" hem "0.5 üst" tutar
+    compatible = calculate_max_gain(coupon(live(53, "1.60", "1.5"), live(54, "2.00", "0.5")))
+    assert compatible.matches[0].weight == Decimal("3.60")
+    assert not compatible.warnings
+
+    # "0.5 alt" (toplam 0) ile "1.5 üst" (toplam 2+) birlikte tutamaz
+    contradictory = calculate_max_gain(coupon(live(53, "1.60", "0.5"), live(54, "2.00", "1.5")))
+    assert contradictory.matches[0].weight == Decimal("2.00")
+
+
+def test_stray_outcome_is_isolated_with_a_warning():
+    """Alt/Üst altında listelenen hatalı '1' kaydı gelirse yalıtılır."""
+    stray = SelectionInput(
+        match_id="m1",
+        odd_type_id=0,
+        outcome="",
+        odds=Decimal("1.60"),
+        odd_id=3520,  # live 19 / outcome "1" -- katalogdaki hatalı kayıt
+        is_live=1,
+        special_bet_value="1.5",
+    )
+    result = calculate_max_gain(coupon(stray))
+    assert result.matches[0].weight == Decimal("1.60")
+    assert any("yönü anlaşılamadı" in w for w in result.warnings)

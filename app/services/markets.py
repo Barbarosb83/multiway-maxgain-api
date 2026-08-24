@@ -36,7 +36,7 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 
 __all__ = [
@@ -484,6 +484,13 @@ class MarketDef:
     bound: Bounder
     example_outcomes: tuple[str, ...]
     needs_special: bool = False
+    stray_outcomes: frozenset[str] = frozenset()
+    """Sağlayıcı kataloğunda bu piyasa altında görünen ama anlamı olmayan kodlar.
+
+    Alt/Üst piyasalarının bir kısmında ``o``/``u`` yanında ``1``/``2`` de
+    listeleniyor; bunlar hatalı kayıtlar. Doğrulama bunları yok sayar, çalışma
+    anında böyle bir seçim gelirse yalıtılır ve uyarı verilir.
+    """
 
 
 def _market(
@@ -495,6 +502,7 @@ def _market(
     *,
     bounder: Bounder | None = None,
     needs_special: bool = False,
+    stray: frozenset[str] = frozenset(),
 ) -> MarketDef:
     if isinstance(builder, tuple):
         builder, bounder = builder
@@ -506,6 +514,7 @@ def _market(
         bound=bounder or _flat_bound,
         example_outcomes=examples,
         needs_special=needs_special,
+        stray_outcomes=stray,
     )
 
 
@@ -605,6 +614,30 @@ MARKETS: dict[str, MarketDef] = {
             bounder=_goal_range_bound,
         ),
     )
+}
+
+
+# Sağlayıcı kataloğunda bazı alt/üst piyasaları "o"/"u" yanında "1" ve "2"
+# outcome'larını da listeliyor (ör. live 19). Bunlar hatalı kayıtlardır: gerçek
+# seçimler yalnızca alt ve üsttür. Tek tek tanımlara yazmak yerine aileye
+# topluca tanıtılır.
+_TOTAL_FAMILY = {
+    "ALT_UST",
+    "ALT_UST_3WAY",
+    "ALT_UST_EV",
+    "ALT_UST_DEP",
+    "IY_ALT_UST",
+    "IY2_ALT_UST",
+}
+_STRAY_TOTAL_OUTCOMES = frozenset({"1", "2"})
+
+MARKETS = {
+    market_id: (
+        replace(market, stray_outcomes=_STRAY_TOTAL_OUTCOMES)
+        if market_id in _TOTAL_FAMILY
+        else market
+    )
+    for market_id, market in MARKETS.items()
 }
 
 

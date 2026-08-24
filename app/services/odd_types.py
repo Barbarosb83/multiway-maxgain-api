@@ -260,8 +260,8 @@ def _build_market_map() -> tuple[dict[tuple[int, int], str], list[tuple[int, int
         special = _sample_special(market)
         problem = ""
         for outcome in OUTCOMES_BY_ODD_TYPE.get(key, []):
-            if is_aggregate(outcome):
-                continue  # tümleyen olarak çözülür, piyasa yüklemi gerekmez
+            if is_aggregate(outcome) or outcome.strip() in market.stray_outcomes:
+                continue  # tümleyen ya da hatalı katalog kaydı
             try:
                 market.build(outcome, special)
             except UnknownOutcome as exc:
@@ -288,10 +288,6 @@ KNOWN_UNMAPPABLE: dict[tuple[int, int], str] = {
     (1, 180): (
         "Adı 'Winner' ama outcome'lar 'competitor_1..14'; tek maç değil, "
         "çok yarışmacılı outright piyasası."
-    ),
-    (1, 19): (
-        "Outcome kümesi '1, 2, o, u' -- '1' ve '2'nin Üst/Alt karşılığı "
-        "belgelenmemiş, tahmin edilirse yön ters çevrilebilir."
     ),
 }
 

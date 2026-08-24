@@ -54,6 +54,8 @@ def test_every_mapping_is_consistent_with_its_outcome_set():
         special = "0:1" if "HANDIKAP" in market_id else ("2.5" if market.needs_special else None)
         siblings = tuple(OUTCOMES_BY_ODD_TYPE.get((is_live, odd_type_id), ()))
         for outcome in siblings:
+            if outcome.strip() in market.stray_outcomes:
+                continue  # katalogdaki hatalı kayıt; çalışma anında yalıtılır
             try:
                 mask_for(market_id, outcome, special, space.key, siblings)
             except UnknownOutcome as exc:
@@ -73,6 +75,16 @@ def test_same_name_different_shape_is_rejected_not_guessed():
     assert ODD_TYPE_MARKET[(1, 708)] == "MS_1X2"  # outcome'ları 1 / x / 2
     assert (1, 180) not in ODD_TYPE_MARKET  # outcome'ları competitor_1..14
     assert (1, 180) in KNOWN_UNMAPPABLE
+
+
+def test_stray_catalog_outcomes_do_not_block_the_mapping():
+    """Alt/Üst piyasalarında listelenen '1'/'2' hatalı kayıtlardır.
+
+    Bunlar eşlemeyi engellememeli; gerçek seçimler yalnızca alt/üsttür.
+    """
+    assert MARKETS["IY_ALT_UST"].stray_outcomes == frozenset({"1", "2"})
+    assert ODD_TYPE_MARKET[(1, 19)] == "IY_ALT_UST"
+    assert set(OUTCOMES_BY_ODD_TYPE[(1, 19)]) == {"1", "2", "o", "u"}
 
 
 def test_aggregate_outcome_is_the_complement_of_its_siblings():
@@ -102,6 +114,7 @@ def test_aggregate_outcome_is_the_complement_of_its_siblings():
         (0, 1496, "HANDIKAP"),  # Points Spread -> handikap
         (1, 708, "MS_1X2"),  # live ana piyasa: Winner
         (1, 483, "MS_1X2"),  # Matchbet AAMS regular time
+        (1, 19, "IY_ALT_UST"),  # katalogdaki hatalı "1"/"2" kayıtlarına rağmen
         (1, 24, "CIFT_SANS"),
         (1, 178, "IY_MS"),  # HH/HD/HA kodlaması
         (1, 750, "IY_MS"),  # 11/1X/21 kodlaması

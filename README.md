@@ -117,7 +117,7 @@ Dört katalog da repoda tutulur:
 | [`data/outcomes_live.csv`](data/outcomes_live.csv) | `oddTypeId, oddId, outcome` |
 
 `GET /api/v1/odd-types` piyasaları listeler (`isLive`, `q`, `limit`, `offset` ile süzülür).
-**1426 piyasanın ve 8965 oddId'nin tamamı yüklenir; 184 piyasanın anlamı eşlenmiştir.**
+**1426 piyasanın ve 8965 oddId'nin tamamı yüklenir; 185 piyasanın anlamı eşlenmiştir.**
 
 ### Eşlemeler veriyle doğrulanır
 
@@ -139,8 +139,13 @@ Aynı kontrol, adın tek başına yetmediği durumları da ayıklar. Live katalo
 | `live 708` | `1`, `x`, `2` | Maç sonucu — eşlendi (live'ın ana piyasası) |
 | `live 180` | `competitor_1` … `competitor_14` | Çok yarışmacılı outright — eşlenmedi |
 
-Doğrulanamayan üç id bilerek eşlenmemiştir (`KNOWN_UNMAPPABLE`) ve bir test listenin bundan
+Doğrulanamayan iki id bilerek eşlenmemiştir (`KNOWN_UNMAPPABLE`) ve bir test listenin bundan
 ibaret kaldığını sabitler; yeni bir uyumsuzluk çıkarsa CI kırılır.
+
+Katalogda **hatalı kayıtlar** da var: bazı alt/üst piyasaları `o`/`u` yanında `1` ve `2`
+outcome'larını listeliyor (ör. `live 19`). Bunların alt/üst karşılığı yok. Piyasa tanımında
+`stray_outcomes` olarak işaretlenirler: eşlemeyi engellemezler, ama böyle bir seçim gerçekten
+gelirse yalıtılır ve uyarı verilir — sessizce yanlış yöne çevrilmez.
 
 `Others` / `other` / `C` gibi toplayıcı outcome'lar, kardeş outcome'ların **tümleyeni** olarak
 modellenir: `Doğru Skor 1:0` ile `Others` böylece doğru biçimde birbirini dışlar.
