@@ -364,7 +364,17 @@ def _resolve_match(
         source = "live" if selection.is_live else "pre"
 
         if info.market is None:
-            reason = "anlamı eşlenmemiş" if info.in_catalog else f"{source} katalogunda yok"
+            other = info.name_in_other_namespace
+            if other is not None:
+                # Id kendi katalogunda yok ama diğerinde var: isLive bayrağı ile
+                # oddTypeId birbirini tutmuyor olabilir.
+                reason = (
+                    f"{source} katalogunda yok, ancak "
+                    f"{'pre' if source == 'live' else 'live'} katalogunda "
+                    f"{other!r} olarak var -- isLive bayrağı seçime uymuyor olabilir"
+                )
+            else:
+                reason = "anlamı eşlenmemiş" if info.in_catalog else f"{source} katalogunda yok"
             isolate(
                 selection,
                 f"oddType {selection.odd_type_id} ({source}) {reason}; aynı id'nin "

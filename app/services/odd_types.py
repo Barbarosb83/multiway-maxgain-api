@@ -418,6 +418,17 @@ class OddTypeInfo:
         return (self.is_live, self.odd_type_id) in ODD_TYPE_NAME
 
     @property
+    def name_in_other_namespace(self) -> str | None:
+        """Id kendi katalogunda yoksa diğerinde var mı?
+
+        Varsa bu, ``isLive`` bayrağının seçime uymadığına işaret eder: pre-match
+        id'si canlı olarak, ya da tersi gönderilmiştir.
+        """
+        if self.in_catalog:
+            return None
+        return ODD_TYPE_NAME.get((1 - self.is_live, self.odd_type_id))
+
+    @property
     def group(self) -> str:
         """Seçimin ait olduğu kısıt grubu.
 

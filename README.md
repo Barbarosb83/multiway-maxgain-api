@@ -274,6 +274,20 @@ izdüşüm çelişenleri eler:
 | `Sıradaki gol "2"` + `Doğru skor 1:1` | uyumlu — deplasman önce atar |
 | `Sıradaki gol "x"` + `0.5 Üst` | çelişki — daha gol atılmayacak |
 
+### Yanlış katalog uyarısı
+
+Bir id kendi katalogunda bulunamayıp **diğerinde** bulunursa, bu genellikle `isLive` bayrağının
+seçime uymadığı anlamına gelir. Uyarı bunu açıkça söyler:
+
+```
+oddType 1839 (live) live katalogunda yok, ancak pre katalogunda '3 Way' olarak var
+-- isLive bayrağı seçime uymuyor olabilir
+```
+
+Bu, gerçek bir kuponda iki farklı piyasanın (`1X2` ve `NG`) aynı `oddTypeId`'yi taşımasını
+yakaladı. Aynı id'yi taşıdıkları için dışlayıcı sayılmışlar ve maç ağırlığı `4.25` yerine `2.25`
+çıkmıştı — kupon toplamında 469.27 yerine 248.43.
+
 ### Eşlenmemiş id'ler reddedilmez
 
 Anlamı eşlenmemiş ya da katalogda hiç olmayan bir id için güvenli geri düşüş uygulanır:

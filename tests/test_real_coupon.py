@@ -781,3 +781,117 @@ def test_next_goal_uses_the_current_score_not_just_zero():
     # "Daha gol yok" ise maç 1-0 biter; deplasman kazanamaz.
     no_more = live_selection(NEXT_GOAL, "x", "3.00", specialBetValue="1:0", currentScore="1:0")
     assert weight_for(no_more, winner) == "5.00"
+
+
+# --------------------------------------------------------------------------- #
+# isLive bayrağı ile oddTypeId'nin uyuşmadığı kupon
+# --------------------------------------------------------------------------- #
+
+MISMATCHED_COUPON = [
+    {
+        "MatchId": -13978035,
+        "BetType": 1,
+        "OddsType": "1X2",
+        "OddsTypeId": 708,
+        "OutCome": "1",
+        "SpecialBetValue": None,
+        "OddValue1": 1.6667,
+    },
+    {
+        "MatchId": -13978035,
+        "BetType": 1,
+        "OddsType": "NG",
+        "OddsTypeId": 11,
+        "OutCome": "2",
+        "SpecialBetValue": "0:0",
+        "OddValue1": 2.75,
+    },
+    # Bu iki satır BetType=1 olmasına rağmen pre id'si (1839) taşıyor ve
+    # birbirinden farklı piyasalar olduğu hâlde aynı id'yi kullanıyor.
+    {
+        "MatchId": 72478500,
+        "BetType": 1,
+        "OddsType": "1X2",
+        "OddsTypeId": 1839,
+        "OutCome": "x",
+        "SpecialBetValue": None,
+        "OddValue1": 2,
+    },
+    {
+        "MatchId": 72478500,
+        "BetType": 1,
+        "OddsType": "NG",
+        "OddsTypeId": 1839,
+        "OutCome": "1",
+        "SpecialBetValue": "0:0",
+        "OddValue1": 2.25,
+    },
+]
+
+LIVE_IDS = {"1X2": 708, "NG": 11}
+
+
+def mismatched_request(*, corrected: bool) -> dict:
+    return {
+        "couponAmount": "100.00",
+        "selections": [
+            {
+                "matchId": row["MatchId"],
+                "isLive": row["BetType"],
+                "oddTypeId": (
+                    LIVE_IDS[row["OddsType"]]
+                    if corrected and row["MatchId"] == 72478500
+                    else row["OddsTypeId"]
+                ),
+                "outcome": row["OutCome"],
+                "specialBetValue": row["SpecialBetValue"],
+                "odds": str(row["OddValue1"]),
+                "currentScore": "0:0",
+            }
+            for row in MISMATCHED_COUPON
+        ],
+    }
+
+
+def test_id_from_the_other_namespace_is_pinpointed():
+    """Canlı seçimde pre id'si gelirse uyarı bunu açıkça söylemeli."""
+    body = client.post("/api/v1/coupons/max-gain", json=mismatched_request(corrected=False)).json()
+    warning = next(w for w in body["warnings"] if "1839" in w)
+    assert "pre katalogunda '3 Way' olarak var" in warning
+    assert "isLive bayrağı seçime uymuyor olabilir" in warning
+
+
+def test_mismatched_ids_collapse_two_markets_into_one():
+    """Aynı id taşıyan iki farklı piyasa dışlayıcı sayılır; sonuç düşük çıkar."""
+    as_sent = client.post(
+        "/api/v1/coupons/max-gain", json=mismatched_request(corrected=False)
+    ).json()
+    corrected = client.post(
+        "/api/v1/coupons/max-gain", json=mismatched_request(corrected=True)
+    ).json()
+
+    osasuna_sent = next(m for m in as_sent["matches"] if m["matchId"] == 72478500)
+    osasuna_fixed = next(m for m in corrected["matches"] if m["matchId"] == 72478500)
+
+    assert osasuna_sent["weight"] == "2.25"  # tek grup, dışlayıcı -> max
+    assert osasuna_fixed["weight"] == "4.25"  # beraberlik + sıradaki gol ev -> 1-1
+    assert osasuna_fixed["groups"][0]["scoreline"]["fullTime"] == "1-1"
+
+    assert as_sent["maxGain"] == "248.43"
+    assert corrected["maxGain"] == "469.27"
+    assert corrected["warnings"] == []
+
+
+def test_four_decimal_odds_are_preserved():
+    """1.6667 gibi dört ondalıklı oranlar yuvarlanmamalı."""
+    body = client.post("/api/v1/coupons/max-gain", json=mismatched_request(corrected=True)).json()
+    rome = next(m for m in body["matches"] if m["matchId"] == -13978035)
+    assert rome["weight"] == "4.4167"  # 1.6667 + 2.75
+    odds = {w["odds"] for w in rome["groups"][0]["winningSelections"]}
+    assert "1.6667" in odds
+
+
+def test_positive_match_id_can_still_be_live():
+    """matchId'nin işareti canlılığı belirlemez; BetType belirler."""
+    body = client.post("/api/v1/coupons/max-gain", json=mismatched_request(corrected=True)).json()
+    assert {m["matchId"] for m in body["matches"]} == {-13978035, 72478500}
