@@ -20,6 +20,10 @@ Kupon, düz bir **seçim listesi**dir. Her seçim şunları taşır:
 | `odds` | Ondalık oran (`> 1.00`) |
 | `oddTypeId`, `outcome` | `oddId` yoksa zorunlu; varsa yok sayılır (tutarsızlık uyarı olarak bildirilir). |
 
+> **Not:** Sağlayıcı kupon gövdesindeki `OddId1` alanı bu katalog kimliği **değildir**
+> (`"719600943100"` = `MatchId` + kendi kodu). O gövde için `oddTypeId` + `outcome` kullanılır;
+> outcome adları çok dilli olarak tanınır (aşağıya bakın).
+
 ### Neden `oddId`
 
 Outcome adları sağlayıcıda dile göre değişebilir (`Üst`, `Over`, `Über`) ve kodlamalar
@@ -33,6 +37,22 @@ oddId   80  ->  live oddType 24,                outcome "1X"
 ```
 
 Servis kanonik adı katalogdan okur; gövdedeki `outcome` alanı yalnızca `oddId` yokken kullanılır.
+
+### Çok dilli outcome kodları
+
+`oddId` gelmediğinde outcome adı doğrudan çözümlenir ve sağlayıcı bunu kendi dilinde gönderebilir.
+Gerçek kuponlarda aynı piyasanın şu kodlarla geldiği görüldü:
+
+| Anlam | Tanınan kodlar |
+|---|---|
+| Karşılıklı gol var | `Yes` · `Y` · `J` · `Ja` · `Var` · `Evet` · `E` · `goal` · `Si` · `Oui` |
+| Karşılıklı gol yok | `No` · `N` · `Nein` · `Yok` · `Hayır` · `H` · `nogoal` · `Non` |
+| Üst | `Over` · `Üst` · `Über` · `O` |
+| Alt | `Under` · `Alt` · `Unter` · `U` |
+| Tek / Çift | `Odd`/`Ungerade` · `Even`/`Gerade` |
+
+Sonuç kodları (`1`, `X`, `2`, `1X`, `12`, `X2`) büyük/küçük harf duyarsızdır — katalog `X`,
+kupon gövdesi `x` gönderebiliyor.
 
 Kupon düzeyinde: `couponAmount`, isteğe bağlı `system`, `bankerMatchIds`, `bonusMultiplier`,
 `maxPayoutCap`, `currency`.

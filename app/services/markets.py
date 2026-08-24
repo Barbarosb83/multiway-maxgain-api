@@ -166,8 +166,11 @@ def describe_atom(space: Space, index: int, period: str = "FT") -> dict[str, str
 # Outcome ayrıştırıcıları
 # --------------------------------------------------------------------------- #
 
-_UNDER = {"ALT", "UNDER", "U"}
-_OVER = {"UST", "ÜST", "OVER", "O"}
+# Sağlayıcı outcome adlarını sağlayıcı dilinde gönderebiliyor (Almanca "Über",
+# Türkçe "Üst", İngilizce "Over"). Kanonik anlam aynı olduğu için hepsi kabul
+# edilir.
+_UNDER = {"ALT", "UNDER", "UNTER", "U"}
+_OVER = {"UST", "ÜST", "OVER", "UBER", "ÜBER", "O"}
 _NUM_RE = re.compile(r"^[+-]?\d+(?:[.,]\d+)?$")
 _PAIR_RE = re.compile(r"^([+-]?\d+(?:[.,]\d+)?)\s*[:/]\s*([+-]?\d+(?:[.,]\d+)?)$")
 _SCORE_RE = re.compile(r"^(\d+)\s*[-:]\s*(\d+)$")
@@ -346,10 +349,15 @@ def _handicap() -> tuple[Builder, Bounder]:
     return build, bound
 
 
+# Evet/hayır tipi outcome'ların dile göre karşılıkları.
+_AFFIRMATIVE = {"VAR", "YES", "Y", "EVET", "E", "KGVAR", "GOAL", "J", "JA", "SI", "OUI", "1"}
+_NEGATIVE = {"YOK", "NO", "HAYIR", "H", "KGYOK", "NOGOAL", "N", "NEIN", "NON", "2"}
+
+
 def _btts_predicate(code: str) -> Callable[[tuple[int, int]], bool]:
-    if code in {"VAR", "YES", "EVET", "KGVAR", "GOAL", "1"}:
+    if code in _AFFIRMATIVE:
         return lambda p: p[0] > 0 and p[1] > 0
-    if code in {"YOK", "NO", "HAYIR", "KGYOK", "NOGOAL", "2"}:
+    if code in _NEGATIVE:
         return lambda p: p[0] == 0 or p[1] == 0
     raise UnknownOutcome(f"Karşılıklı gol outcome'u geçersiz: {code!r} (Var/Yok)")
 
@@ -395,9 +403,9 @@ def _half_time_full_time(outcome: str, _special: str | None) -> Predicate:
 
 def _odd_even(outcome: str, _special: str | None) -> Predicate:
     code = _norm(outcome).replace(" ", "")
-    if code in {"TEK", "ODD"}:
+    if code in {"TEK", "ODD", "UNGERADE"}:
         return lambda s: (s[0][0] + s[0][1]) % 2 == 1
-    if code in {"CIFT", "ÇIFT", "EVEN"}:
+    if code in {"CIFT", "ÇIFT", "EVEN", "GERADE"}:
         return lambda s: (s[0][0] + s[0][1]) % 2 == 0
     raise UnknownOutcome(f"Tek/Çift outcome'u geçersiz: {outcome!r}")
 
@@ -439,7 +447,7 @@ _COMBO_DC = {
     "12": "12",
     "X2": "X2",
 }
-_COMBO_BTTS = {"YES", "NO", "GOAL", "NOGOAL", "VAR", "YOK"}
+_COMBO_BTTS = _AFFIRMATIVE | _NEGATIVE
 _COMBO_TOTAL = _OVER | _UNDER
 
 
@@ -492,9 +500,9 @@ def _result_or_btts(result_code: str) -> Builder:
     def build(outcome: str, _special: str | None) -> Predicate:
         code = _norm(outcome).replace(" ", "")
         both_score = _btts_predicate("YES")
-        if code in {"YES", "VAR", "EVET"}:
+        if code in _AFFIRMATIVE:
             return lambda s: result(s[0]) or both_score(s[0])
-        if code in {"NO", "YOK", "HAYIR"}:
+        if code in _NEGATIVE:
             return lambda s: not (result(s[0]) or both_score(s[0]))
         raise UnknownOutcome(f"Var/Yok outcome'u geçersiz: {outcome!r}")
 

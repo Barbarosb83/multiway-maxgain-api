@@ -9,7 +9,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.alias_generators import to_camel
 
 from app.services.max_gain import MAX_MATCHES, MAX_SELECTIONS_PER_MATCH
@@ -49,6 +49,18 @@ class SelectionIn(StrictBase):
         default=None, max_length=64, description="Sonuç kodu; oddId verildiyse gerekmez"
     )
     odds: Odds = Field(description="Ondalık oran; 1.00'den büyük olmalı")
+
+    @field_validator("odds")
+    @classmethod
+    def _normalize_odds(cls, value: Decimal) -> Decimal:
+        """Oranı en az iki ondalığa tamamlar.
+
+        Sağlayıcı tam sayı oran gönderebiliyor (``6``); bu, oran toplamlarının
+        ``"6"`` gibi tutarsız biçimde dönmesine yol açar. Daha hassas oranlar
+        (``1.025``) olduğu gibi korunur.
+        """
+        return value if -value.as_tuple().exponent >= 2 else value.quantize(Decimal("0.01"))
+
     is_live: int = Field(
         default=0,
         ge=0,
