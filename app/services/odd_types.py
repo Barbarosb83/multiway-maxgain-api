@@ -44,6 +44,7 @@ from pathlib import Path
 from app.services.markets import MARKETS, MarketDef, UnknownOutcome, is_aggregate
 
 __all__ = [
+    "SCORE_BASED_MARKETS",
     "OddTypeInfo",
     "resolve_odd_type",
     "resolve_outcome",
@@ -82,6 +83,7 @@ _NAME_TO_MARKET: dict[str, str] = {
     "1x2": "MS_1X2",
     "winner": "MS_1X2",
     "rest of match": "REST_1X2",
+    "next goal": "SONRAKI_GOL",
     "3way aams": "MS_1X2",
     "total 3way": "ALT_UST_3WAY",
     "double chance": "CIFT_SANS",
@@ -320,6 +322,11 @@ ODD_TYPE_NAME = _load_names()
 OUTCOME_BY_ODD_ID, OUTCOMES_BY_ODD_TYPE = _load_outcomes()
 
 
+# specialBetValue'su eşik değil, anlık skor olan piyasalar.
+_SCORE_BASED_MARKETS = {"REST_1X2", "SONRAKI_GOL"}
+SCORE_BASED_MARKETS = frozenset(_SCORE_BASED_MARKETS)
+
+
 def sample_special_bet_value(market: MarketDef) -> str | None:
     """Doğrulama için temsilî specialBetValue.
 
@@ -330,7 +337,7 @@ def sample_special_bet_value(market: MarketDef) -> str | None:
         return None
     if "HANDIKAP" in market.id:
         return "0:1"
-    if "REST" in market.id:
+    if market.id in _SCORE_BASED_MARKETS:
         return "0:0"
     return "2.5"
 

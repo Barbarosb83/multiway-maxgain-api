@@ -405,6 +405,40 @@ def _rest_result() -> tuple[Builder, Bounder]:
     return build, bound
 
 
+def _next_goal() -> tuple[Builder, Bounder]:
+    """Sıradaki golü kim atar.
+
+    Bu bir *sıralama* iddiasıdır; modellenen sonuç uzayı ise yalnızca skorları
+    taşır, golün ne zaman atıldığını değil. Yüklem bu yüzden bahsin maç sonu
+    skoruna izdüşümüdür: "deplasman sıradaki golü atar" bahsi, deplasmanın
+    anlık skorun üstüne en az bir gol eklediği her sonuçta kazanabilir.
+
+    İzdüşüm bir üst kümedir; yani tek başına bir sıralama piyasası varken
+    kesindir (o skora götüren bir gol sırası daima kurulabilir), aynı maçta
+    birden fazla sıralama piyasası varsa sonucu bir miktar yüksek tutabilir.
+    Her hâlükârda piyasayı hiç modellememekten daha dardır: yalıtılmış bir
+    seçim her zaman toplanırken, izdüşüm çelişenleri eleyebilir.
+    """
+
+    def build(outcome: str, special: str | None) -> Predicate:
+        current_home, current_away = _current_score(special)
+        code = _norm(outcome)
+        if code == "1":
+            return lambda s: s[0][0] >= current_home + 1 and s[0][1] >= current_away
+        if code == "2":
+            return lambda s: s[0][1] >= current_away + 1 and s[0][0] >= current_home
+        if code == "X":
+            # Daha gol atılmaz: maç anlık skorla biter.
+            return lambda s: s[0] == (current_home, current_away)
+        raise UnknownOutcome(f"Sıradaki gol outcome'u geçersiz: {outcome!r} (1, X, 2)")
+
+    def bound(_outcome: str, special: str | None) -> int:
+        current_home, current_away = _current_score(special)
+        return max(current_home, current_away) + MIN_SCORE_BOUND
+
+    return build, bound
+
+
 def _btts_predicate(code: str) -> Callable[[tuple[int, int]], bool]:
     if code in _AFFIRMATIVE:
         return lambda p: p[0] > 0 and p[1] > 0
@@ -677,6 +711,14 @@ def _build_registry() -> dict[str, MarketDef]:
         _correct_score,
         ("1-0",),
         bounder=_correct_score_bound,
+    )
+    markets["SONRAKI_GOL"] = _market(
+        "SONRAKI_GOL",
+        "Sıradaki Gol",
+        "FT",
+        _next_goal(),
+        ("1", "X", "2"),
+        needs_special=True,
     )
     markets["REST_1X2"] = _market(
         "REST_1X2",

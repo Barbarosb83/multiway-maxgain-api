@@ -480,12 +480,12 @@ def test_live_winner_and_total_share_one_group(live_result):
     assert utrecht["groups"][0]["combined"] is True
 
 
-def test_next_goal_market_stays_isolated(live_result):
-    """Gol sırası maç sonu skorundan çıkarılamaz; bağımsız sayılır."""
+def test_next_goal_is_projected_onto_the_score(live_result):
+    """'Sıradaki golü deplasman atar' ile 'kalanı ev kazanır' birlikte tutabilir (2-1)."""
     psv = next(m for m in live_result["matches"] if m["matchId"] == -13996108)
-    assert psv["weight"] == "4.30"  # 1.90 + 2.40, iki ayrı grup
-    assert {g["group"] for g in psv["groups"]} == {"SCORE", "UNMAPPED:1:11"}
-    assert any("oddType 11 (live)" in w for w in live_result["warnings"])
+    assert psv["weight"] == "4.30"  # 1.90 + 2.40
+    assert [g["group"] for g in psv["groups"]] == ["SCORE"]  # tek grup, yalıtılmış değil
+    assert psv["groups"][0]["scoreline"]["fullTime"] == "2-1"
 
 
 def test_live_selection_without_a_score_is_flagged(live_result):
@@ -702,3 +702,82 @@ def test_rest_of_match_falls_back_to_the_match_score():
     body = client.post("/api/v1/coupons/max-gain", json=payload).json()
     # 1:0'dan kalanı ev alırsa deplasman maçı kazanamaz -> çelişki
     assert body["matches"][0]["weight"] == "2.60"
+
+
+# --------------------------------------------------------------------------- #
+# Sıradaki gol -- sıralama iddiasının skor uzayına izdüşümü
+# --------------------------------------------------------------------------- #
+
+
+def live_selection(odd_type_id: int, outcome: str, odds: str, **extra) -> dict:
+    return {
+        "matchId": 1,
+        "isLive": 1,
+        "oddTypeId": odd_type_id,
+        "outcome": outcome,
+        "odds": odds,
+        **extra,
+    }
+
+
+def weight_for(*selections: dict) -> str:
+    body = client.post(
+        "/api/v1/coupons/max-gain",
+        json={"couponAmount": "100.00", "selections": list(selections)},
+    ).json()
+    return body["matches"][0]["weight"]
+
+
+NEXT_GOAL = 11
+CORRECT_SCORE_LIVE = 23
+TOTAL_LIVE = 710
+WINNER_LIVE = 708
+
+
+@pytest.mark.parametrize(
+    ("next_goal_outcome", "other", "expected", "why"),
+    [
+        # Anlık skor 0:0
+        (
+            "2",
+            live_selection(CORRECT_SCORE_LIVE, "1:0", "8.00", currentScore="0:0"),
+            "8.00",
+            "deplasman gol atmamışsa sıradaki golü atmış olamaz",
+        ),
+        (
+            "2",
+            live_selection(CORRECT_SCORE_LIVE, "1:1", "9.00", currentScore="0:0"),
+            "11.40",
+            "1-1'e deplasman önce gol atarak ulaşılabilir",
+        ),
+        (
+            "x",
+            live_selection(TOTAL_LIVE, "Over", "1.30", specialBetValue="0.5", currentScore="0:0"),
+            "2.40",
+            "daha gol atılmazsa toplam 0.5 üstü olamaz",
+        ),
+        (
+            "x",
+            live_selection(TOTAL_LIVE, "Under", "3.00", specialBetValue="0.5", currentScore="0:0"),
+            "5.40",
+            "daha gol atılmaması 0.5 altını gerektirir",
+        ),
+    ],
+    ids=["1-0-celiski", "1-1-uyumlu", "gol-yok-ust", "gol-yok-alt"],
+)
+def test_next_goal_contradictions_are_detected(next_goal_outcome, other, expected, why):
+    next_goal = live_selection(
+        NEXT_GOAL, next_goal_outcome, "2.40", specialBetValue="0:0", currentScore="0:0"
+    )
+    assert weight_for(next_goal, other) == expected, why
+
+
+def test_next_goal_uses_the_current_score_not_just_zero():
+    """1:0 iken 'sıradaki gol ev' + 'deplasman kazanır': 2-3 mümkün, uyumlu."""
+    next_goal = live_selection(NEXT_GOAL, "1", "2.20", specialBetValue="1:0", currentScore="1:0")
+    winner = live_selection(WINNER_LIVE, "2", "5.00", currentScore="1:0")
+    assert weight_for(next_goal, winner) == "7.20"
+
+    # "Daha gol yok" ise maç 1-0 biter; deplasman kazanamaz.
+    no_more = live_selection(NEXT_GOAL, "x", "3.00", specialBetValue="1:0", currentScore="1:0")
+    assert weight_for(no_more, winner) == "5.00"

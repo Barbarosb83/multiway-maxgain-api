@@ -254,9 +254,25 @@ Aynı kısıt, **zaten kaybetmiş** seçimleri de eler: maç 2-0 iken `1.5 Alt` 
 kazanamaz, hesaba katılmaz ve `warnings` ile bildirilir. Canlı bir seçim skorsuz gelirse bu da
 uyarı olarak döner.
 
-**Gol sırasına bağlı piyasalar** (`live 11`, "Next goal") bilerek eşlenmemiştir: hangi takımın
-*sıradaki* golü attığı maç sonu skorundan çıkarılamaz. Yalıtılmış kalırlar, yani sonuçtan bağımsız
-sayılıp toplanırlar — pratikte doğru olan da budur.
+**Sıradaki gol** (`live 11`) bir *sıralama* iddiasıdır; modellenen uzay ise yalnızca skorları
+taşır. Bahis, maç sonu skoruna **izdüşürülerek** modellenir — anlık skor `ch:ca` iken:
+
+| Outcome | Kısıt |
+|---|---|
+| `1` (ev) | `ft_ev ≥ ch+1` |
+| `2` (deplasman) | `ft_dep ≥ ca+1` |
+| `x` (daha gol yok) | `ft = ch:ca` |
+
+İzdüşüm bir üst kümedir: aynı maçta **tek** sıralama piyasası varken kesindir (o skora götüren bir
+gol sırası daima kurulabilir), birden fazlası varsa sonucu bir miktar yüksek tutabilir. Yine de
+piyasayı hiç modellememekten **her zaman daha dardır** — yalıtılmış bir seçim koşulsuz toplanırken
+izdüşüm çelişenleri eler:
+
+| `0:0` iken | Sonuç |
+|---|---|
+| `Sıradaki gol "2"` + `Doğru skor 1:0` | çelişki — deplasman hiç gol atmamış |
+| `Sıradaki gol "2"` + `Doğru skor 1:1` | uyumlu — deplasman önce atar |
+| `Sıradaki gol "x"` + `0.5 Üst` | çelişki — daha gol atılmayacak |
 
 ### Eşlenmemiş id'ler reddedilmez
 

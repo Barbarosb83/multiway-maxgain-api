@@ -54,7 +54,12 @@ from app.services.markets import (
     parse_score,
     required_bound,
 )
-from app.services.odd_types import OUTCOMES_BY_ODD_TYPE, resolve_odd_type, resolve_outcome
+from app.services.odd_types import (
+    OUTCOMES_BY_ODD_TYPE,
+    SCORE_BASED_MARKETS,
+    resolve_odd_type,
+    resolve_outcome,
+)
 
 __all__ = [
     "CouponInput",
@@ -369,9 +374,10 @@ def _resolve_match(
 
         siblings = tuple(OUTCOMES_BY_ODD_TYPE.get((selection.is_live, selection.odd_type_id), ()))
         special = selection.special_bet_value
-        if not special and "REST" in info.market.id and current_score is not None:
-            # "Maçın kalanı" piyasası anlık skoru specialBetValue'da bekler;
-            # gelmemişse maçın skorundan doldurulur.
+        if not special and info.market.id in SCORE_BASED_MARKETS and current_score is not None:
+            # Anlık skor temelli piyasalar ("maçın kalanı", "sıradaki gol")
+            # skoru specialBetValue'da bekler; gelmemişse maçın skorundan
+            # doldurulur.
             special = f"{current_score[0]}:{current_score[1]}"
             selection = replace(selection, special_bet_value=special)
 
