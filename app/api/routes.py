@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Query
 
 from app.core.config import settings
-from app.models.schemas import CouponIn, ErrorOut, MaxGainOut, OddTypeOut
+from app.models.schemas import CouponIn, ErrorOut, MaxGainOut, OddTypeOut, OddTypePage
 from app.services.max_gain import (
     CouponError,
     CouponInput,
@@ -13,7 +15,7 @@ from app.services.max_gain import (
     SelectionInput,
     calculate_max_gain,
 )
-from app.services.odd_types import catalog
+from app.services.odd_types import catalog, catalog_size
 
 router = APIRouter()
 
@@ -39,6 +41,12 @@ def _to_domain(payload: CouponIn) -> tuple[CouponInput, dict[str, str | int]]:
                 odd_type_id=selection.odd_type_id,
                 outcome=selection.outcome.strip(),
                 odds=selection.odds,
+                is_live=selection.is_live,
+                special_bet_value=(
+                    selection.special_bet_value.strip()
+                    if selection.special_bet_value is not None
+                    else None
+                ),
             )
         )
 
@@ -139,18 +147,29 @@ def compute_max_gain_batch(payload: list[CouponIn]) -> list[MaxGainOut]:
 
 @router.get(
     "/odd-types",
-    response_model=list[OddTypeOut],
-    summary="Tanımlı oddTypeId kataloğu",
+    response_model=OddTypePage,
+    summary="oddTypeId kataloğu (pre + live)",
     tags=["katalog"],
 )
-def odd_types() -> list[OddTypeOut]:
+def odd_types(
+    is_live: Annotated[int | None, Query(ge=0, le=1, alias="isLive")] = None,
+    q: Annotated[str | None, Query(max_length=100, description="Ada göre arama")] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> OddTypePage:
     """Hangi ``oddTypeId``'nin hangi piyasaya karşılık geldiğini listeler.
 
-    Katalogda olmayan bir id kupona gelirse istek reddedilmez; aynı id'nin
-    seçimleri dışlayıcı, farklı id'ler bağımsız kabul edilir ve yanıtın
+    Pre-match ve live katalogları ayrı id uzaylarıdır; ``isLive`` ile süzülür.
+    ``mapped: false`` olan id'lerin adı bilinir ama anlamı eşlenmemiştir: aynı
+    id'nin seçimleri dışlayıcı, farklı id'ler bağımsız kabul edilir ve yanıtın
     ``warnings`` alanında bildirilir.
     """
-    return [OddTypeOut(**row) for row in catalog()]
+    return OddTypePage(
+        total=catalog_size(is_live, q),
+        limit=limit,
+        offset=offset,
+        items=[OddTypeOut(**row) for row in catalog(is_live, q, limit, offset)],
+    )
 
 
 @router.get("/health", summary="Sağlık kontrolü", tags=["ops"])

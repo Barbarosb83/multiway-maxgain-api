@@ -1,121 +1,239 @@
 """Bahis piyasalarının anlamsal tanımları.
 
-Bir seçimin (oddType + outcome) *ne zaman kazandığını* bilmeden iki seçimin
-birlikte tutup tutamayacağı söylenemez. Bu modül her piyasayı, maçın somut
-sonuçları üzerinde bir yüklem (predicate) olarak tanımlar.
+Bir seçimin (oddType + outcome + specialBetValue) *ne zaman kazandığını*
+bilmeden iki seçimin birlikte tutup tutamayacağı söylenemez. Bu modül her
+piyasayı, maçın somut sonuçları üzerinde bir yüklem olarak tanımlar.
 
-Atom
-----
-Gol bazlı tüm piyasalar tek bir ortak sonuç uzayında yaşar::
+Sonuç uzayı
+-----------
+Tüm piyasalar ortak bir skor uzayında yaşar::
 
-    Atom = (iy_ev, iy_dep, ms_ev, ms_dep)
+    Atom = (İY_ev, İY_dep, MS_ev, MS_dep)
 
-yani ilk yarı ve maç sonu skorları birlikte. ``iy <= ms`` kısıtı sayesinde
-"İY 2-0" ile "MS toplam 0.5 Alt" gibi çelişkiler kendiliğinden elenir --
-bu iki piyasa ayrı ayrı modellenseydi yanlışlıkla uyumlu sayılırdı.
+İlk yarı ve maç sonu skorlarının ``İY <= MS`` kısıtıyla birlikte tutulması,
+"İY 2-0" ile "MS 1.5 Alt" gibi çelişkilerin kendiliğinden elenmesini sağlar.
 
-Skorlar ``MAX_GOALS``'a kadar modellenir; bu 36^2 = 1296 atom demektir.
-Daha yüksek skorlar hiçbir standart piyasanın sonucunu değiştirmez.
+Uzay **maça göre uyarlanır**. Skor tavanı sabit değildir; o maçtaki seçimlerin
+eşiklerinden türetilir. Futbolda 2.5 gol sınırı için 4'lük bir tavan yeter,
+basketbolda 220.5 sayı sınırı için ~222 gerekir. Uzay şu biçimlerde kurulur:
 
-Gol dışı piyasalar (korner, kart vb.) kendi gruplarında yaşar; farklı
-gruplar bağımsız kabul edilir ve katkıları toplanır.
+``JOINT``
+    Dört boyutlu, ilk yarı dahil. Yalnızca tavan küçükken (futbol, hokey,
+    hentbol) atom sayısı makul kalır.
+``FLAT``
+    İki boyutlu, atomlar ``(0, 0, ev, dep)``. Devre piyasası yoksa ya da grup
+    tek bir periyoda aitse kullanılır; büyük tavanlara izin verir.
+``HALF``
+    İki boyutlu, atomlar ``(ev, dep, ev, dep)``. Yalnızca ilk yarı piyasalarını
+    içeren gruplar için.
+
+Ortak uzay atom sınırını aşarsa hesap periyotlara bölünür (bkz. ``max_gain``);
+bu, periyotlar arası çelişki tespitini kaybettirir ama sonucu asla düşürmez.
 """
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import lru_cache
 
 __all__ = [
-    "MAX_GOALS",
-    "GOALS_GROUP",
     "Atom",
-    "ATOMS",
-    "FULL_MASK",
+    "Space",
+    "SpaceKind",
+    "MAX_ATOMS",
+    "MIN_SCORE_BOUND",
+    "MAX_SCORE_BOUND",
     "MarketDef",
     "MARKETS",
     "UnknownOutcome",
+    "get_space",
     "mask_for",
+    "required_bound",
     "describe_atom",
 ]
 
-MAX_GOALS = 7
-GOALS_GROUP = "GOALS"
-
-# (iy_ev, iy_dep, ms_ev, ms_dep)
+# (İY_ev, İY_dep, MS_ev, MS_dep)
 Atom = tuple[int, int, int, int]
 
+SpaceKind = str  # "JOINT" | "FLAT" | "HALF"
 
-def _build_atoms() -> tuple[Atom, ...]:
+# Tek bir uzayda tutulacak azami atom sayısı. Maske kurulumu atom başına bir
+# yüklem çağrısıdır; 65k atom ~20 ms sürer ve sonuç önbelleklenir.
+MAX_ATOMS = 65_000
+MIN_SCORE_BOUND = 4
+MAX_SCORE_BOUND = 254  # FLAT uzayda (254+1)^2 = 65_025
+
+
+class UnknownOutcome(ValueError):
+    """Outcome / specialBetValue ikilisi, ilgili piyasa için çözümlenemedi."""
+
+
+# --------------------------------------------------------------------------- #
+# Sonuç uzayı
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class Space:
+    kind: SpaceKind
+    max_score: int
+    atoms: tuple[Atom, ...]
+
+    @property
+    def full_mask(self) -> int:
+        return (1 << len(self.atoms)) - 1
+
+    @property
+    def key(self) -> tuple[str, int]:
+        return (self.kind, self.max_score)
+
+
+def _joint_atoms(bound: int) -> tuple[Atom, ...]:
     return tuple(
         (ht_home, ht_away, ft_home, ft_away)
-        for ft_home in range(MAX_GOALS + 1)
-        for ft_away in range(MAX_GOALS + 1)
+        for ft_home in range(bound + 1)
+        for ft_away in range(bound + 1)
         for ht_home in range(ft_home + 1)
         for ht_away in range(ft_away + 1)
     )
 
 
-ATOMS: tuple[Atom, ...] = _build_atoms()
-FULL_MASK: int = (1 << len(ATOMS)) - 1
+def _flat_atoms(bound: int) -> tuple[Atom, ...]:
+    return tuple((0, 0, home, away) for home in range(bound + 1) for away in range(bound + 1))
 
 
-class UnknownOutcome(ValueError):
-    """Outcome kodu, ilgili piyasa için çözümlenemedi."""
+def _half_atoms(bound: int) -> tuple[Atom, ...]:
+    return tuple((home, away, home, away) for home in range(bound + 1) for away in range(bound + 1))
 
 
-def describe_atom(index: int) -> dict[str, str]:
-    """Atom indeksini insan okunur skor bilgisine çevirir."""
-    ht_home, ht_away, ft_home, ft_away = ATOMS[index]
+_BUILDERS: dict[SpaceKind, Callable[[int], tuple[Atom, ...]]] = {
+    "JOINT": _joint_atoms,
+    "FLAT": _flat_atoms,
+    "HALF": _half_atoms,
+}
+
+
+def joint_fits(bound: int) -> bool:
+    """Dört boyutlu uzay, verilen tavanla atom sınırına sığıyor mu?"""
+    per_side = (bound + 1) * (bound + 2) // 2
+    return per_side * per_side <= MAX_ATOMS
+
+
+@lru_cache(maxsize=64)
+def get_space(kind: SpaceKind, max_score: int) -> Space:
+    return Space(kind=kind, max_score=max_score, atoms=_BUILDERS[kind](max_score))
+
+
+def describe_atom(space: Space, index: int) -> dict[str, str]:
+    """Atom indeksini insan okunur skora çevirir."""
+    ht_home, ht_away, ft_home, ft_away = space.atoms[index]
+    if space.kind == "HALF":
+        return {"half_time": f"{ht_home}-{ht_away}"}
+    if space.kind == "FLAT":
+        return {"full_time": f"{ft_home}-{ft_away}"}
     return {"half_time": f"{ht_home}-{ht_away}", "full_time": f"{ft_home}-{ft_away}"}
 
 
 # --------------------------------------------------------------------------- #
-# Outcome kodu ayrıştırıcıları
+# Outcome / specialBetValue ayrıştırıcıları
 # --------------------------------------------------------------------------- #
 
-_UNDER = {"ALT", "UNDER", "U"}
-_OVER = {"UST", "ÜST", "OVER", "O"}
-_TOTAL_RE = re.compile(r"^(?P<a>[^\d]*)(?P<line>\d+(?:[.,]\d+)?)(?P<b>[^\d]*)$")
+_UNDER = {"ALT", "UNDER", "U", "-"}
+_OVER = {"UST", "ÜST", "OVER", "O", "+"}
+_NUM_RE = re.compile(r"^[+-]?\d+(?:[.,]\d+)?$")
+_PAIR_RE = re.compile(r"^([+-]?\d+(?:[.,]\d+)?)\s*[:/]\s*([+-]?\d+(?:[.,]\d+)?)$")
 _SCORE_RE = re.compile(r"^(\d+)\s*[-:]\s*(\d+)$")
 _RANGE_RE = re.compile(r"^(\d+)\s*(?:-\s*(\d+)|\+)$")
-_HANDICAP_RE = re.compile(r"^(?P<side>[12X])\s*\(?\s*(?P<hcap>[+-]?\d+(?:[.,]\d+)?)\s*\)?$", re.I)
 
 
-def _norm(outcome: str) -> str:
-    return outcome.strip().upper().replace("İ", "I")
+def _norm(value: str | None) -> str:
+    return (value or "").strip().upper().replace("İ", "I")
 
 
-def _parse_total(outcome: str) -> tuple[str, float]:
-    """'2.5 Üst', 'Alt 2,5', 'OVER 2.5' -> ('OVER'|'UNDER', 2.5)"""
-    match = _TOTAL_RE.match(_norm(outcome))
+def _number(text: str) -> float:
+    return float(text.replace(",", "."))
+
+
+def _line_from(outcome: str, special: str | None, label: str) -> tuple[str, float]:
+    """Alt/Üst yönü ve eşiği çözer.
+
+    Eşik öncelikle ``specialBetValue``'dan alınır; yoksa outcome'un içinden
+    ayrıştırılmaya çalışılır (``"2.5 Üst"`` gibi birleşik kodlar için).
+    """
+    code = _norm(outcome).replace(" ", "")
+    special_code = _norm(special)
+
+    if special_code and _NUM_RE.match(special_code):
+        line = _number(special_code)
+        side = code.rstrip("0123456789.,+-") or code
+        if side in _OVER:
+            return "OVER", line
+        if side in _UNDER:
+            return "UNDER", line
+        raise UnknownOutcome(f"{label} yönü anlaşılamadı: outcome={outcome!r}")
+
+    match = re.match(r"^(?P<a>[^\d]*)(?P<line>\d+(?:[.,]\d+)?)(?P<b>[^\d]*)$", code)
     if not match:
-        raise UnknownOutcome(f"Alt/Üst outcome'u çözümlenemedi: {outcome!r}")
-    words = f"{match.group('a')}{match.group('b')}".strip(" ()")
-    line = float(match.group("line").replace(",", "."))
+        raise UnknownOutcome(
+            f"{label} eşiği bulunamadı: outcome={outcome!r}, specialBetValue={special!r}"
+        )
+    words = f"{match.group('a')}{match.group('b')}".strip("()")
+    line = _number(match.group("line"))
     if words in _OVER:
         return "OVER", line
     if words in _UNDER:
         return "UNDER", line
-    raise UnknownOutcome(f"Alt/Üst yönü anlaşılamadı: {outcome!r}")
+    raise UnknownOutcome(f"{label} yönü anlaşılamadı: outcome={outcome!r}")
+
+
+def _handicap_from(special: str | None) -> tuple[float, float]:
+    """``"0:1"`` -> (0, 1); ``"-1.5"`` -> (-1.5, 0)."""
+    code = _norm(special).replace(" ", "")
+    pair = _PAIR_RE.match(code)
+    if pair:
+        return _number(pair.group(1)), _number(pair.group(2))
+    if _NUM_RE.match(code):
+        return _number(code), 0.0
+    raise UnknownOutcome(f"Handikap değeri çözümlenemedi: specialBetValue={special!r}")
 
 
 # --------------------------------------------------------------------------- #
-# Piyasa tanımları
+# Periyot seçiciler
+# --------------------------------------------------------------------------- #
+
+_PERIODS: dict[str, Callable[[Atom], tuple[int, int]]] = {
+    "FT": lambda a: (a[2], a[3]),
+    "HT": lambda a: (a[0], a[1]),
+    "2H": lambda a: (a[2] - a[0], a[3] - a[1]),
+}
+
+Predicate = Callable[[Atom], bool]
+Builder = Callable[[str, str | None], Predicate]
+Bounder = Callable[[str, str | None], int]
+
+
+def _flat_bound(_outcome: str, _special: str | None) -> int:
+    return MIN_SCORE_BOUND
+
+
+# --------------------------------------------------------------------------- #
+# Piyasa yüklemleri
 # --------------------------------------------------------------------------- #
 
 
-def _match_result(ht: bool) -> Callable[[str], Callable[[Atom], bool]]:
-    def build(outcome: str) -> Callable[[Atom], bool]:
-        code = _norm(outcome)
-        home, away = (0, 1) if ht else (2, 3)
-        table = {
-            "1": lambda a: a[home] > a[away],
-            "X": lambda a: a[home] == a[away],
-            "2": lambda a: a[home] < a[away],
+def _match_result(period: str) -> Builder:
+    score = _PERIODS[period]
+
+    def build(outcome: str, _special: str | None) -> Predicate:
+        table: dict[str, Predicate] = {
+            "1": lambda a: score(a)[0] > score(a)[1],
+            "X": lambda a: score(a)[0] == score(a)[1],
+            "2": lambda a: score(a)[0] < score(a)[1],
         }
+        code = _norm(outcome)
         if code not in table:
             raise UnknownOutcome(f"Maç sonucu outcome'u geçersiz: {outcome!r} (1, X, 2 bekleniyor)")
         return table[code]
@@ -123,72 +241,137 @@ def _match_result(ht: bool) -> Callable[[str], Callable[[Atom], bool]]:
     return build
 
 
-def _double_chance(ht: bool) -> Callable[[str], Callable[[Atom], bool]]:
-    def build(outcome: str) -> Callable[[Atom], bool]:
-        code = "".join(sorted(_norm(outcome).replace(" ", "")))
-        home, away = (0, 1) if ht else (2, 3)
-        table = {
-            "1X": lambda a: a[home] >= a[away],
-            "12": lambda a: a[home] != a[away],
-            "2X": lambda a: a[home] <= a[away],
+def _double_chance(period: str) -> Builder:
+    score = _PERIODS[period]
+
+    def build(outcome: str, _special: str | None) -> Predicate:
+        table: dict[str, Predicate] = {
+            "1X": lambda a: score(a)[0] >= score(a)[1],
+            "12": lambda a: score(a)[0] != score(a)[1],
+            "2X": lambda a: score(a)[0] <= score(a)[1],
         }
+        code = "".join(sorted(_norm(outcome).replace(" ", "").replace("-", "")))
         if code not in table:
-            raise UnknownOutcome(
-                f"Çift şans outcome'u geçersiz: {outcome!r} (1X, 12, X2 bekleniyor)"
-            )
+            raise UnknownOutcome(f"Çift şans outcome'u geçersiz: {outcome!r} (1X, 12, X2)")
         return table[code]
 
     return build
 
 
-def _total_goals(ht: bool) -> Callable[[str], Callable[[Atom], bool]]:
-    def build(outcome: str) -> Callable[[Atom], bool]:
-        side, line = _parse_total(outcome)
-        home, away = (0, 1) if ht else (2, 3)
-        if side == "OVER":
-            return lambda a: a[home] + a[away] > line
-        return lambda a: a[home] + a[away] < line
+def _draw_no_bet(period: str) -> Builder:
+    """Beraberlikte iade; kazanç senaryosu açısından yalnızca 1 ve 2 tutar."""
+    score = _PERIODS[period]
+
+    def build(outcome: str, _special: str | None) -> Predicate:
+        table: dict[str, Predicate] = {
+            "1": lambda a: score(a)[0] > score(a)[1],
+            "2": lambda a: score(a)[0] < score(a)[1],
+        }
+        code = _norm(outcome)
+        if code not in table:
+            raise UnknownOutcome(f"Draw No Bet outcome'u geçersiz: {outcome!r} (1, 2)")
+        return table[code]
 
     return build
 
 
-def _both_teams_to_score(outcome: str) -> Callable[[Atom], bool]:
+def _total(period: str, side: str = "both") -> tuple[Builder, Bounder]:
+    """Alt/Üst. ``side``: 'both' | 'home' | 'away'."""
+    score = _PERIODS[period]
+
+    def value(atom: Atom) -> int:
+        home, away = score(atom)
+        if side == "home":
+            return home
+        if side == "away":
+            return away
+        return home + away
+
+    def build(outcome: str, special: str | None) -> Predicate:
+        direction, line = _line_from(outcome, special, "Alt/Üst")
+        if direction == "OVER":
+            return lambda a: value(a) > line
+        return lambda a: value(a) < line
+
+    def bound(outcome: str, special: str | None) -> int:
+        _direction, line = _line_from(outcome, special, "Alt/Üst")
+        return math.ceil(line) + 1
+
+    return build, bound
+
+
+def _handicap(period: str) -> tuple[Builder, Bounder]:
+    score = _PERIODS[period]
+
+    def build(outcome: str, special: str | None) -> Predicate:
+        home_hcap, away_hcap = _handicap_from(special)
+        code = _norm(outcome)
+        table: dict[str, Predicate] = {
+            "1": lambda a: score(a)[0] + home_hcap > score(a)[1] + away_hcap,
+            "X": lambda a: score(a)[0] + home_hcap == score(a)[1] + away_hcap,
+            "2": lambda a: score(a)[0] + home_hcap < score(a)[1] + away_hcap,
+        }
+        if code not in table:
+            raise UnknownOutcome(f"Handikap outcome'u geçersiz: {outcome!r} (1, X, 2)")
+        return table[code]
+
+    def bound(_outcome: str, special: str | None) -> int:
+        home_hcap, away_hcap = _handicap_from(special)
+        return math.ceil(max(abs(home_hcap), abs(away_hcap))) + MIN_SCORE_BOUND
+
+    return build, bound
+
+
+def _both_teams_to_score(outcome: str, _special: str | None) -> Predicate:
     code = _norm(outcome).replace(" ", "")
-    if code in {"VAR", "YES", "EVET", "KGVAR"}:
+    if code in {"VAR", "YES", "EVET", "KGVAR", "GOAL", "1"}:
         return lambda a: a[2] > 0 and a[3] > 0
-    if code in {"YOK", "NO", "HAYIR", "KGYOK"}:
+    if code in {"YOK", "NO", "HAYIR", "KGYOK", "NOGOAL", "2"}:
         return lambda a: a[2] == 0 or a[3] == 0
-    raise UnknownOutcome(f"Karşılıklı gol outcome'u geçersiz: {outcome!r} (Var/Yok bekleniyor)")
+    raise UnknownOutcome(f"Karşılıklı gol outcome'u geçersiz: {outcome!r} (Var/Yok)")
 
 
-def _correct_score(outcome: str) -> Callable[[Atom], bool]:
-    match = _SCORE_RE.match(_norm(outcome))
+def _correct_score(outcome: str, special: str | None) -> Predicate:
+    match = _SCORE_RE.match(_norm(outcome)) or _SCORE_RE.match(_norm(special))
     if not match:
         raise UnknownOutcome(f"Doğru skor outcome'u geçersiz: {outcome!r} ('2-1' bekleniyor)")
     home, away = int(match.group(1)), int(match.group(2))
     return lambda a: a[2] == home and a[3] == away
 
 
-def _half_time_full_time(outcome: str) -> Callable[[Atom], bool]:
+def _correct_score_bound(outcome: str, special: str | None) -> int:
+    match = _SCORE_RE.match(_norm(outcome)) or _SCORE_RE.match(_norm(special))
+    if not match:
+        raise UnknownOutcome(f"Doğru skor outcome'u geçersiz: {outcome!r}")
+    return max(int(match.group(1)), int(match.group(2))) + 1
+
+
+def _half_time_full_time(outcome: str, _special: str | None) -> Predicate:
     parts = _norm(outcome).replace(" ", "").split("/")
     if len(parts) != 2:
         raise UnknownOutcome(f"İY/MS outcome'u geçersiz: {outcome!r} ('1/X' bekleniyor)")
-    first = _match_result(ht=True)(parts[0])
-    second = _match_result(ht=False)(parts[1])
+    first = _match_result("HT")(parts[0], None)
+    second = _match_result("FT")(parts[1], None)
     return lambda a: first(a) and second(a)
 
 
-def _odd_even(outcome: str) -> Callable[[Atom], bool]:
-    code = _norm(outcome).replace(" ", "")
-    if code in {"TEK", "ODD"}:
-        return lambda a: (a[2] + a[3]) % 2 == 1
-    if code in {"CIFT", "ÇIFT", "EVEN"}:
-        return lambda a: (a[2] + a[3]) % 2 == 0
-    raise UnknownOutcome(f"Tek/Çift outcome'u geçersiz: {outcome!r}")
+def _odd_even(period: str) -> Builder:
+    score = _PERIODS[period]
+
+    def build(outcome: str, _special: str | None) -> Predicate:
+        code = _norm(outcome).replace(" ", "")
+        if code in {"TEK", "ODD"}:
+            return lambda a: sum(score(a)) % 2 == 1
+        if code in {"CIFT", "ÇIFT", "EVEN"}:
+            return lambda a: sum(score(a)) % 2 == 0
+        raise UnknownOutcome(f"Tek/Çift outcome'u geçersiz: {outcome!r}")
+
+    return build
 
 
-def _goal_range(outcome: str) -> Callable[[Atom], bool]:
-    match = _RANGE_RE.match(_norm(outcome).replace(" ", ""))
+def _goal_range(outcome: str, special: str | None) -> Predicate:
+    source = _norm(outcome).replace(" ", "") or _norm(special).replace(" ", "")
+    match = _RANGE_RE.match(source)
     if not match:
         raise UnknownOutcome(f"Gol aralığı outcome'u geçersiz: {outcome!r} ('0-1' veya '6+')")
     low = int(match.group(1))
@@ -198,17 +381,18 @@ def _goal_range(outcome: str) -> Callable[[Atom], bool]:
     return lambda a: low <= a[2] + a[3] <= high
 
 
-def _handicap(outcome: str) -> Callable[[Atom], bool]:
-    match = _HANDICAP_RE.match(_norm(outcome))
+def _goal_range_bound(outcome: str, special: str | None) -> int:
+    source = _norm(outcome).replace(" ", "") or _norm(special).replace(" ", "")
+    match = _RANGE_RE.match(source)
     if not match:
-        raise UnknownOutcome(f"Handikap outcome'u geçersiz: {outcome!r} ('1(-1)' bekleniyor)")
-    side = match.group("side").upper()
-    hcap = float(match.group("hcap").replace(",", "."))
-    if side == "1":
-        return lambda a: a[2] + hcap > a[3]
-    if side == "2":
-        return lambda a: a[3] + hcap > a[2]
-    return lambda a: a[2] + hcap == a[3]
+        raise UnknownOutcome(f"Gol aralığı outcome'u geçersiz: {outcome!r}")
+    high = int(match.group(2)) if match.group(2) else int(match.group(1))
+    return high + 1
+
+
+# --------------------------------------------------------------------------- #
+# Piyasa kaydı
+# --------------------------------------------------------------------------- #
 
 
 @dataclass(frozen=True)
@@ -217,40 +401,128 @@ class MarketDef:
 
     id: str
     label: str
-    build: Callable[[str], Callable[[Atom], bool]]
+    period: str  # "FT" | "HT" | "2H" -- periyot bölmesi için
+    build: Builder
+    bound: Bounder
     example_outcomes: tuple[str, ...]
-    group: str = GOALS_GROUP
+    needs_special: bool = False
+
+
+def _market(
+    market_id: str,
+    label: str,
+    period: str,
+    builder: Builder | tuple[Builder, Bounder],
+    examples: tuple[str, ...],
+    *,
+    bounder: Bounder | None = None,
+    needs_special: bool = False,
+) -> MarketDef:
+    if isinstance(builder, tuple):
+        builder, bounder = builder
+    return MarketDef(
+        id=market_id,
+        label=label,
+        period=period,
+        build=builder,
+        bound=bounder or _flat_bound,
+        example_outcomes=examples,
+        needs_special=needs_special,
+    )
 
 
 MARKETS: dict[str, MarketDef] = {
     m.id: m
     for m in (
-        MarketDef("MS_1X2", "Maç Sonucu (1X2)", _match_result(ht=False), ("1", "X", "2")),
-        MarketDef("CIFT_SANS", "Çift Şans", _double_chance(ht=False), ("1X", "12", "X2")),
-        MarketDef("IY_1X2", "İlk Yarı Sonucu (1X2)", _match_result(ht=True), ("1", "X", "2")),
-        MarketDef("IY_CIFT_SANS", "İlk Yarı Çift Şans", _double_chance(ht=True), ("1X", "X2")),
-        MarketDef("ALT_UST", "Alt / Üst", _total_goals(ht=False), ("2.5 Alt", "2.5 Üst")),
-        MarketDef("IY_ALT_UST", "İlk Yarı Alt / Üst", _total_goals(ht=True), ("0.5 Üst",)),
-        MarketDef("KARSILIKLI_GOL", "Karşılıklı Gol", _both_teams_to_score, ("Var", "Yok")),
-        MarketDef("DOGRU_SKOR", "Doğru Skor", _correct_score, ("1-0", "2-1")),
-        MarketDef("IY_MS", "İlk Yarı / Maç Sonucu", _half_time_full_time, ("1/1", "X/2")),
-        MarketDef("TEK_CIFT", "Toplam Gol Tek / Çift", _odd_even, ("Tek", "Çift")),
-        MarketDef("TOPLAM_GOL", "Toplam Gol Aralığı", _goal_range, ("0-1", "2-3", "6+")),
-        MarketDef("HANDIKAP", "Handikaplı Maç Sonucu", _handicap, ("1(-1)", "2(+1)")),
+        # Sonuç ailesi -- sporlar arasında yapı olarak aynıdır
+        _market("MS_1X2", "Maç Sonucu (1X2)", "FT", _match_result("FT"), ("1", "X", "2")),
+        _market("CIFT_SANS", "Çift Şans", "FT", _double_chance("FT"), ("1X", "12", "X2")),
+        _market("DNB", "Draw No Bet", "FT", _draw_no_bet("FT"), ("1", "2")),
+        _market("IY_1X2", "İlk Yarı Sonucu", "HT", _match_result("HT"), ("1", "X", "2")),
+        _market("IY_CIFT_SANS", "İlk Yarı Çift Şans", "HT", _double_chance("HT"), ("1X", "X2")),
+        _market("IY_DNB", "İlk Yarı Draw No Bet", "HT", _draw_no_bet("HT"), ("1", "2")),
+        _market("IY2_1X2", "İkinci Yarı Sonucu", "2H", _match_result("2H"), ("1", "X", "2")),
+        _market("IY2_CIFT_SANS", "İkinci Yarı Çift Şans", "2H", _double_chance("2H"), ("1X", "X2")),
+        _market("IY2_DNB", "İkinci Yarı Draw No Bet", "2H", _draw_no_bet("2H"), ("1", "2")),
+        # Alt / Üst -- eşik specialBetValue'dan gelir
+        _market("ALT_UST", "Alt / Üst", "FT", _total("FT"), ("Alt", "Üst"), needs_special=True),
+        _market(
+            "ALT_UST_EV", "Alt / Üst (Ev)", "FT", _total("FT", "home"), ("Alt",), needs_special=True
+        ),
+        _market(
+            "ALT_UST_DEP",
+            "Alt / Üst (Deplasman)",
+            "FT",
+            _total("FT", "away"),
+            ("Üst",),
+            needs_special=True,
+        ),
+        _market(
+            "IY_ALT_UST", "İlk Yarı Alt / Üst", "HT", _total("HT"), ("Üst",), needs_special=True
+        ),
+        _market(
+            "IY2_ALT_UST", "İkinci Yarı Alt / Üst", "2H", _total("2H"), ("Alt",), needs_special=True
+        ),
+        # Handikap -- specialBetValue "0:1" ya da "-1.5"
+        _market("HANDIKAP", "Handikap", "FT", _handicap("FT"), ("1", "X", "2"), needs_special=True),
+        _market(
+            "IY_HANDIKAP",
+            "İlk Yarı Handikap",
+            "HT",
+            _handicap("HT"),
+            ("1", "2"),
+            needs_special=True,
+        ),
+        # Gol bazlı
+        _market("KARSILIKLI_GOL", "Karşılıklı Gol", "FT", _both_teams_to_score, ("Var", "Yok")),
+        _market(
+            "DOGRU_SKOR",
+            "Doğru Skor",
+            "FT",
+            _correct_score,
+            ("1-0", "2-1"),
+            bounder=_correct_score_bound,
+        ),
+        _market("IY_MS", "İlk Yarı / Maç Sonucu", "FT", _half_time_full_time, ("1/1", "X/2")),
+        _market("TEK_CIFT", "Tek / Çift", "FT", _odd_even("FT"), ("Tek", "Çift")),
+        _market("IY_TEK_CIFT", "İlk Yarı Tek / Çift", "HT", _odd_even("HT"), ("Tek", "Çift")),
+        _market(
+            "TOPLAM_GOL",
+            "Toplam Gol Aralığı",
+            "FT",
+            _goal_range,
+            ("0-1", "2-3", "6+"),
+            bounder=_goal_range_bound,
+        ),
     )
 }
 
 
-@lru_cache(maxsize=4096)
-def mask_for(market_id: str, outcome: str) -> int:
-    """(piyasa, outcome) ikilisinin kazandığı atomların bit maskesi.
+# --------------------------------------------------------------------------- #
+# Maske üretimi
+# --------------------------------------------------------------------------- #
 
-    Sonuç önbelleklenir; aynı outcome tekrar geldiğinde 1296 atom yeniden taranmaz.
-    """
+
+def required_bound(market_id: str, outcome: str, special: str | None) -> int:
+    """Seçimin doğru değerlendirilebilmesi için gereken skor tavanı."""
     market = MARKETS[market_id]
-    predicate = market.build(outcome)
-    mask = 0
-    for index, atom in enumerate(ATOMS):
+    return max(MIN_SCORE_BOUND, min(market.bound(outcome, special), MAX_SCORE_BOUND))
+
+
+@lru_cache(maxsize=8192)
+def mask_for(market_id: str, outcome: str, special: str | None, space_key: tuple[str, int]) -> int:
+    """(piyasa, outcome, specialBetValue) ikilisinin kazandığı atomların bit maskesi.
+
+    Maske bytearray üzerinden kurulur: her atom için tek bir bit yazılır ve
+    sonuç tek seferde tamsayıya çevrilir. Doğrudan ``mask |= 1 << i`` yaklaşımı
+    her adımda maskenin tamamını kopyaladığı için atom sayısı büyüdükçe
+    karesel yavaşlar.
+    """
+    space = get_space(*space_key)
+    predicate = MARKETS[market_id].build(outcome, special)
+
+    buffer = bytearray((len(space.atoms) + 7) // 8)
+    for index, atom in enumerate(space.atoms):
         if predicate(atom):
-            mask |= 1 << index
-    return mask
+            buffer[index >> 3] |= 1 << (index & 7)
+    return int.from_bytes(buffer, "little")

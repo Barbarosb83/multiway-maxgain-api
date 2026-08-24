@@ -1,0 +1,867 @@
+﻿1,Which team has kick off?
+2,Which team will lead at halftime?
+3,Rest of match
+4,Winner Penalties
+5,3-way (OT only!) Football
+6,Total (OT only!)
+7,Who wins the rest of the match (OT only!)?
+8,Which player will win the match?
+9,Which player will win the set?
+10,Which player will win games x and y of set n?
+11,"Next goal "
+12,Next Goal (OT only!)
+13,Next goal (Penalty shootout)
+14,Draw No Bet
+15,Who wins the period?
+16,Final Result (in sets - best of 3)
+17,Final Result (in sets - best of 5)
+18,Halftime - Who wins the rest?
+19,1st Half - Total
+20,Halftime - 3way
+21,Number of sets (best of 3)
+22,Number of sets (best of 5)
+23,Correct score
+24,Double Chance (ALL)
+25,Goals home team
+26,Correct score first half flex
+27,Goal/No goal
+28,Odd/Even
+29,Goals away team
+30,Asian total
+31,Handicap BASKETBALL(ASIAN??) WRONG
+32,Asian total first half
+33,Asian handicap first half
+34,"Which team will win the match, including overtime? (BASKETBALL)"
+35,Handicap (BASKETBALL)
+36,"Total for whole match, including overtime (BASKETBALL)"
+37,Odd/Even for whole match including overtime
+38,Draw No Bet for first period
+39,Who wins the rest of the first period?
+40,Total for first period
+41,Asian handicap for first period
+42,Odd/Even for first period
+43,Draw no Bet for second period
+44,Total for second period
+45,Asian handicap for second period
+46,Draw No Bet for third period
+47,Total for third Period
+48,Asian handicap for third period
+49,Draw no Bet for fourth period
+50,Total for fourth period
+51,Asian handicap for fourth period
+52,Who wins the rest of the second period?
+53,Odd/Even for second period
+54,Odd/Even for third period
+55,Odd/Even for fourth period
+56,Draw No Bet first half
+57,Odd/Even for first half
+58,Will there be overtime?
+59,Who scores Xth point
+60,Which team wins jump ball?
+61,Which team wins race to X points
+62,How many sets will exceed score limit
+63,Odd/Even for fifth period
+64,Total for fifth period
+65,"Which team wins race to X points, first set?"
+66,"Which team wins race to X points, second set?"
+67,"Which team wins race to X points, third set?"
+68,"Which team wins race to X points, fourth set?"
+69,"Which team wins race to X points, fifth set?"
+70,Asian handicap for fifth period
+71,Who scores Xth point first set
+72,Who scores Xth point second set
+73,Who scores Xth point third set
+74,Who scores Xth point fourth set
+75,Who scores Xth point fifth set
+76,"Winning margins, handball"
+77,Total number of games
+78,Total number of games in set 1
+79,Total number of games in set 2
+80,Total number of games in set 3
+81,Total number of games in set 4
+82,Total number of games in set 5
+83,Who wins game X of set 1?
+84,Who wins game X of set 2?
+85,Who wins game X of set 3?
+86,Who wins game X of set 4?
+87,Who wins game X of set 5?
+88,Odd/Even number of games
+89,Odd/Even number of games in set
+90,Score of game X of set 1
+91,Score of game X of set 2
+92,Score of game X of set 3
+93,Score of game X of set 4
+94,Score of game X of set 5
+95,Handicap for first half
+96,Winner VOLLEYBALL
+97,Winner Set X VOLLEYBALL
+98,Correct score flex
+99,Correct score flex
+100,"Which team will win the match, incl. OT and penalties? (ICE HOCKEY)"
+101,1st Half Next Goal
+102,Score of game X of set 1 or break
+103,Score of game X of set 2 or break
+104,Score of game X of set 3 or break
+105,Score of game X of set 4 or break
+106,Score of game X of set 5 or break
+107,Asian handicap Overtime
+108,Asian handicap Overtime first Half
+109,Overtime first half 3way
+110,Overtime Correct score flex
+111,Overtime first half Correct score flex
+112,When will next goal be scored
+113,Highest Scoring Half
+114,Cornerbet
+115,1st Half - Cornerbet
+116,Corner Handicap
+117,1st Half - Corner Handicap
+118,Total Corners
+119,Total Corners (aggregated)
+120,1st Half - Total Corners
+121,1st Half - Total Corners (aggregated)
+122,Corners hometeam
+123,Corners awayteam
+124,Total Corners hometeam
+125,Total Corners awayteam
+126,1st Half - Corners hometeam
+127,1st Half - Corners awayteam
+128,1st Half - Total Corners hometeam
+129,1st Half - Total Corners awayteam
+130,Corners Odd/Even
+131,1st Half - Corners Odd/Even
+132,Exact number of goals
+133,1st Half - Exact number of goals
+134,Total hometeam
+135,Total awayteam
+136,1st Half - Goals hometeam
+137,1st Half - Goals awayteam
+138,Anytime Goal scorer
+139,Next Goal scorer
+140,Bookingbet
+141,Total Bookings
+142,Total Bookings (excactly)
+143,Sending off?
+144,Bookings Hometeam
+145,Bookings Awayteam
+146,Total Booking Points
+147,Total Booking Points (aggregated)
+148,1st Half - Total Bookings
+149,1st Half - Total Bookings (exactly)
+150,1st Half - Bookings Hometeam
+151,1st Half - Bookings Awayteam
+152,1st Half - Total Booking Points
+153,1st Half - Total Booking Points (aggregated)
+154,Matchbet and Totals
+155,Goals home team
+156,Goals away team
+157,Correct score flex
+158,Correct score first half flex
+159,"Who wins the rest of the match, including overtime?"
+160,"Winning margins, including overtime"
+161,Maximum period total score
+162,Which team gets highest score for period
+163,Will there be an 18th half-inning (baseball)?
+164,Total for sixth period
+165,Total for seventh period
+166,Total for eighth period
+167,Total for ninth period
+168,Total for tenth period
+169,Who scores Xth point?
+170,Who advances to next round?
+171,How will the match be decided?
+172,"Winning margins american football, including overtime"
+173,1st Half - Total hometeam
+174,1st Half - Total awayteam
+175,"Next points (team), including overtime"
+176,"Next points (kind), including overtime"
+177,Next points (team) halftime
+178,Halftime/fulltime
+179,Highest Scoring Quarter
+180,Winner
+181,Lay Winner
+182,Place
+183,Lay Place
+184,Straight Forecast
+185,Dual Forecast
+186,Straight Tricast
+187,Dual Tricast
+188,Which Team to Score?
+189,Correct score AAMS-logic
+190,2nd Half - 3way
+191,2nd Half - Double chance (1X - 12 - X2)
+192,2nd Half - Draw No Bet
+193,2nd Half - Handicap
+194,2nd Half - Total
+195,Halftime - Double chance (1X - 12 - X2)
+196,Winning margins Rugby
+197,Halftime - Winning margins Rugby
+198,Total margins Rugby
+199,Halftime - Total margins Rugby
+200,Which team will lead after 5 innings
+201,Total after 5 innings
+202,Final Result (in sets - best of 7)
+203,Number of sets (best of 7)
+204,Odd/Even for sixth period
+205,Odd/Even for seventh period
+206,Asian handicap for sixth period
+207,Asian handicap for seventh period
+208,Who scores Xth point sixth set
+209,"Which team wins race to X points, sixth set?"
+210,"Which team wins race to X points, seventh set?"
+211,Who scores Xth point seventh set
+212,How many sets will exceed score limit
+213,Asian leg handicap for first set
+214,Asian leg handicap for second set
+215,Asian leg handicap for third set
+216,Asian leg handicap for fourth set
+217,Asian leg handicap for fifth set
+218,Asian leg handicap for sixth set
+219,Asian leg handicap for seventh set
+220,Asian leg handicap for eighth set
+221,Asian leg handicap for ninth set
+222,Asian leg handicap for tenth set
+223,Asian leg handicap for eleventh set
+224,Asian leg handicap for twelfth set
+225,Asian leg handicap for thirteenth set
+226,Who wins Xth leg first set
+227,Who wins Xth leg second set
+228,Who wins Xth leg third set
+229,Who wins Xth leg fourth set
+230,Who wins Xth leg fifth set
+231,Who wins Xth leg sixth set
+232,Who wins Xth leg seventh set
+233,Who wins Xth leg eighth set
+234,Who wins Xth leg ninth set
+235,Who wins Xth leg tenth set
+236,Who wins Xth leg eleventh set
+237,Who wins Xth leg twelfth set
+238,Who wins Xth leg thirteenth set
+239,Correct score in sets
+240,Set Handicap
+241,Correct score in legs in set
+242,Win rest first set
+243,Win rest second set
+244,Win rest third set
+245,Win rest fourth set
+246,Win rest fifth set
+247,Win rest sixth set
+248,Win rest seventh set
+249,Win rest eighth set
+250,Win rest ninth set
+251,Win rest tenth set
+252,Win rest eleventh set
+253,Win rest twelfth set
+254,Win rest thirteenth set
+255,Total legs for first set
+256,Total legs for second set
+257,Total legs for third set
+258,Total legs for fourth set
+259,Total legs for fifth set
+260,Total legs for sixth set
+261,Total legs for seventh set
+262,Total legs for eighth set
+263,Total legs for ninth set
+264,Total legs for tenth set
+265,Total legs for eleventh set
+266,Total legs for twelfth set
+267,Total legs for thirteenth set
+268,Total sets
+269,Asian Set handicap
+270,Correct Score Snooker
+271,Who will win the frame?
+272,Show
+273,Tiebreak in match
+274,Tiebreak in set [setNr]
+275,Who wins [pointNr!] point in game [gameNr] of set [setNr]
+276,Game [gameNr] to deuce of set [setNr]
+277,Correct score in set Tennis
+278,Total legs in match
+279,Asian Leg Handicap
+280,Odd/Even sets in match
+281,Highest scoring player on first visits of leg x for first set
+282,Highest scoring player on first visits of leg x for second set
+283,Highest scoring player on first visits of leg x for third set
+284,Highest scoring player on first visits of leg x for forth set
+285,Highest scoring player on first visits of leg x for fifth set
+286,Highest scoring player on first visits of leg x for sixth set
+287,Highest scoring player on first visits of leg x for seventh set
+288,Highest scoring player on first visits of leg x for eighth set
+289,Highest scoring player on first visits of leg x for ninth set
+290,Highest scoring player on first visits of leg x for tenth set
+291,Highest scoring player on first visits of leg x for eleventh set
+292,Highest scoring player on first visits of leg x for twelfth set
+293,Highest scoring player on first visits of leg x for thirteenth set
+294,Total points on first visit of leg x for first set
+295,Total points on first visit of leg x for second set
+296,Total points on first visit of leg x for third set
+297,Total points on first visit of leg x for forth set
+298,Total points on first visit of leg x for fifth set
+299,Total points on first visit of leg x for sixth set
+300,Total points on first visit of leg x for seventh set
+301,Total points on first visit of leg x for eighth set
+302,Total points on first visit of leg x for ninth set
+303,Total points on first visit of leg x for tenth set
+304,Total points on first visit of leg x for eleventh set
+305,Total points on first visit of leg x for twelfth set
+306,Total points on first visit of leg x for thirteenth set
+307,Checkout score 40+ in leg x for first set
+308,Checkout score 40+ in leg x for second set
+309,Checkout score 40+ in leg x for third set
+310,Checkout score 40+ in leg x for forth set
+311,Checkout score 40+ in leg x for fifth set
+312,Checkout score 40+ in leg x for sixth set
+313,Checkout score 40+ in leg x for seventh set
+314,Checkout score 40+ in leg x for eighth set
+315,Checkout score 40+ in leg x for ninth set
+316,Checkout score 40+ in leg x for tenth set
+317,Checkout score 40+ in leg x for eleventh set
+318,Checkout score 40+ in leg x for twelfth set
+319,Checkout score 40+ in leg x for thirteenth set
+320,Odd/Even legs for Xth set
+321,Total Darts in leg x for first set
+322,Total Darts in leg x for second set
+323,Total Darts in leg x for third set
+324,Total Darts in leg x for forth set
+325,Total Darts in leg x for fifth set
+326,Total Darts in leg x for sixth set
+327,Total Darts in leg x for seventh set
+328,Total Darts in leg x for eighth set
+329,Total Darts in leg x for ninth set
+330,Total Darts in leg x for tenth set
+331,Total Darts in leg x for eleventh set
+332,Total Darts in leg x for twelfth set
+333,Total Darts in leg x for thirteenth set
+334,Checkout colour in leg x for first set
+335,Checkout colour in leg x for second set
+336,Checkout colour in leg x for third set
+337,Checkout colour in leg x for forth set
+338,Checkout colour in leg x for fifth set
+339,Checkout colour in leg x for sixth set
+340,Checkout colour in leg x for seventh set
+341,Checkout colour in leg x for eighth set
+342,Checkout colour in leg x for ninth set
+343,Checkout colour in leg x for tenth set
+344,Checkout colour in leg x for eleventh set
+345,Checkout colour in leg x for twelfth set
+346,Checkout colour in leg x for thirteenth set
+347,Any player to score a 180 in leg x for first set
+348,Any player to score a 180 in leg x for second set
+349,Any player to score a 180 in leg x for third set
+350,Any player to score a 180 in leg x for forth set
+351,Any player to score a 180 in leg x for fifth set
+352,Any player to score a 180 in leg x for sixth set
+353,Any player to score a 180 in leg x for seventh set
+354,Any player to score a 180 in leg x for eighth set
+355,Any player to score a 180 in leg x for ninth set
+356,Any player to score a 180 in leg x for tenth set
+357,Any player to score a 180 in leg x for eleventh set
+358,Any player to score a 180 in leg x for twelfth set
+359,Any player to score a 180 in leg x leg for thirteenth set
+360,Player 1 to score a 180 in leg x for first set
+361,Player 1 to score a 180 in leg x for second set
+362,Player 1 to score a 180 in leg x for third set
+363,Player 1 to score a 180 in leg x for forth set
+364,Player 1 to score a 180 in leg x for fifth set
+365,Player 1 to score a 180 in leg x for sixth set
+366,Player 1 to score a 180 in leg x for seventh set
+367,Player 1 to score a 180 in leg x for eighth set
+368,Player 1 to score a 180 in leg x for ninth set
+369,Player 1 to score a 180 in leg x for tenth set
+370,Player 1 to score a 180 in leg x for eleventh set
+371,Player 1 to score a 180 in leg x for twelfth set
+372,Player 1 to score a 180 in leg x for thirteenth set
+373,Player 2 to score a 180 in leg x for first set
+374,Player 2 to score a 180 in leg x for second set
+375,Player 2 to score a 180 in leg x for third set
+376,Player 2 to score a 180 in leg x for forth set
+377,Player 2 to score a 180 in leg x for fifth set
+378,Player 2 to score a 180 in leg x for sixth set
+379,Player 2 to score a 180 in leg x for seventh set
+380,Player 2 to score a 180 in leg x for eighth set
+381,Player 2 to score a 180 in leg x for ninth set
+382,Player 2 to score a 180 in leg x for tenth set
+383,Player 2 to score a 180 in leg x for eleventh set
+384,Player 2 to score a 180 in leg x for twelfth set
+385,Player 2 to score a 180 in leg x for thirteenth set
+386,Total 180s for first set
+387,Total 180s for second set
+388,Total 180s for third set
+389,Total 180s for forth set
+390,Total 180s for fifth set
+391,Total 180s for sixth set
+392,Total 180s for seventh set
+393,Total 180s for eighth set
+394,Total 180s for ninth set
+395,Total 180s for tenth set
+396,Total 180s for eleventh set
+397,Total 180s for twelfth set
+398,Total 180s for thirteenth set
+399,Total 180s of Player 1 for first set
+400,Total 180s of Player 1 for second set
+401,Total 180s of Player 1 for third set
+402,Total 180s of Player 1 for forth set
+403,Total 180s of Player 1 for fifth set
+404,Total 180s of Player 1 for sixth set
+405,Total 180s of Player 1 for seventh set
+406,Total 180s of Player 1 for eighth set
+407,Total 180s of Player 1 for ninth set
+408,Total 180s of Player 1 for tenth set
+409,Total 180s of Player 1 for eleventh set
+410,Total 180s of Player 1 for twelfth set
+411,Total 180s of Player 1 for thirteenth set
+412,Total 180s of Player 2 for first set
+413,Total 180s of Player 2 for second set
+414,Total 180s of Player 2 for third set
+415,Total 180s of Player 2 for forth set
+416,Total 180s of Player 2 for fifth set
+417,Total 180s of Player 2 for sixth set
+418,Total 180s of Player 2 for seventh set
+419,Total 180s of Player 2 for eighth set
+420,Total 180s of Player 2 for ninth set
+421,Total 180s of Player 2 for tenth set
+422,Total 180s of Player 2 for eleventh set
+423,Total 180s of Player 2 for twelfth set
+424,Total 180s of Player 2 for thirteenth set
+425,Most 180s for first set
+426,Most 180s for second set
+427,Most 180s for third set
+428,Most 180s for forth set
+429,Most 180s for fifth set
+430,Most 180s for sixth set
+431,Most 180s for seventh set
+432,Most 180s for eighth set
+433,Most 180s for ninth set
+434,Most 180s for tenth set
+435,Most 180s for eleventh set
+436,Most 180s for twelfth set
+437,Most 180s for thirteenth set
+438,Most 180s
+439,Total 180s
+440,Total 180s of Player 1
+441,Total 180s of Player 2
+442,Total hometeam including overtime (BASKETBALL)
+443,Total awayteam including overtime (BASKETBALL)
+444,Total hometeam after 5 innings
+445,Total awayteam after 5 innings
+446,Asian handicap 1st half
+447,Asian handicap after 5 innings
+448,Matchbet and total including overtime
+449,Correct score Bowls
+450,Winner Set
+451,Home total [total] in [setNr!] set
+452,Away total [total] in [setNr!] set
+453,Who will win end [endNr] in set [setNr]
+454,Exact points in end [endNr] of the [setNr!] set
+455,Odd/Even in end [endNr] of the [setNr!] set
+456,Total [total] for end [endNr] of the [setNr!] set
+457,Draw no bet for the [setNr!] set
+458,Player 1 to win a set
+459,Player 2 to win a set
+460,Double Result (1st set / match)
+461,Any set will end 6:0 or 0:6
+462,Match Game Handicap
+463,Game Handicap for set [setNr]
+464,Exact number of points in game [gameNr] of set [setNr]
+465,Total [total] for [setNr!] set
+466,Asian handicap [handicap] for [setNr!] set
+467,"Which team wins race to [points] points, [setNr!] set"
+468,"Which team scores [point!] point, [setNr!] set"
+469,Handicap [handicap] for [setNr!] set
+470,Total AAMS for first period
+471,Total AAMS for second period
+472,Total AAMS for third period
+473,Total AAMS for fourth period
+474,Matchbet AAMS for first period
+475,Matchbet AAMS for second period
+476,Matchbet AAMS for third period
+477,Matchbet AAMS for fourth period
+478,3way for first period
+479,3way for second period
+480,3way for third period
+481,3way for fourth period
+482,Total AAMS regular time
+483,Matchbet AAMS regular time
+484,Odd/Even
+485,Draw No Bet
+486,"Which team wins race to X points, first period?"
+487,"Which team wins race to X points, second period?"
+488,"Which team wins race to X points, third period?"
+489,"Which team wins race to X points, fourth period?"
+490,Match Winner (incl. Super Over)
+491,Total runs
+492,Total runs hometeam
+493,Total runs awayteam
+494,Runs hometeam
+495,Runs awayteam
+496,Odd/Even number of runs
+497,Number of runs in highest scoring over?
+498,Which team will have the highest scoring over?
+499,Will there be a superover?
+500,Which team will lead after [overs] overs
+501,Total [total] runs hometeam after [overs] overs
+502,Total [total] runs awayteam after [overs] overs
+503,Runs hometeam after [overs] overs
+504,Runs awayteam after [overs] overs
+505,Total [total] runs hometeam for over [over] in [innings!] innings
+506,Odd/Even number of runs hometeam for over [over] in [innings!] innings
+507,Total [total] runs hometeam in [delivery!] delivery of over [over] in [innings!] innings
+508,Next dismissal
+509,Next dismissal (caught / not caught)
+510,Home No Bet
+511,Away No Bet
+512,Winning margins
+513,Exact number of goals
+514,Both Score
+515,Clean sheet home team
+516,Clean sheet away team
+517,Matchbet and both teams to score
+518,Matchbet and 1st goal
+519,Double chance for [periodNr!] period
+520,Asian total [total] for [periodNr!] period
+521,Exact number of goals for [periodNr!] period
+522,Both teams to score for [periodNr!] period
+523,Which Team to Score for [periodNr!] period
+524,Clean sheet home team for [periodNr!] period
+525,Clean sheet away team for [periodNr!] period
+526,Goals home team for [periodNr!] period
+527,Goals away team for [periodNr!] period
+528,Total home team [total] for [periodNr!] period
+529,Total away team [total] for [periodNr!] period
+530,Correct score for [periodNr!] period
+531,Next goal [nextGoal] for [periodNr!] period
+532,Home team to win all periods
+533,Away team to win all periods
+534,Home team win either period
+535,Away team win either period
+536,Home team to score in all periods
+537,Away team to score in all periods
+538,All periods over [total]
+539,All periods under [total]
+540,Highest scoring period
+541,Highest scoring period home team
+542,Highest scoring period away team
+543,"Handicap, including overtime and penalties"
+544,"Asian total, including overtime and penalties"
+545,"Exact number of goals, including overtime and penalties"
+546,"Which team to score, including overtime and penalties"
+547,"Clean sheet home team, including overtime and penalties"
+548,"Clean sheet away team, including overtime and penalties"
+549,"Goals home team, including overtime and penalties"
+550,"Goals away team, including overtime and penalties"
+551,"Correct score, including overtime and penalties"
+552,"Matchbet and Both teams to Score, including overtime and penalties"
+553,"Matchbet and 1st goal, including overtime and penalties"
+554,"Next goal, including overtime and penalties"
+555,1st period and Matchbet
+556,Correct score Ice Hockey
+557,"1st period and Matchbet, including overtime and penalties"
+558,Handicap [handicap] for [periodNr!] period
+559,Total [total] runs awayteam for over [over] in [innings!] innings
+560,Odd/Even number of runs awayteam for over [over] in [innings!] innings
+561,Total [total] runs awayteam in [delivery!] delivery of over [over] in [innings!] innings
+562,Total hometeam including overtime and penalties
+563,Total awayteam including overtime and penalties
+564,Odd/Even for whole match including overtime and penalties
+565,Matchbet and total including overtime and penalties
+566,"Winning margins, including overtime and penalties"
+567,"Total for whole match, including overtime and penalties"
+568,"Asian handicap for whole match, including overtime and penalties"
+569,Soccer Penalty shootout - Winning Margin
+570,"Soccer Penalty shootout - Total [total] "
+571,Soccer Penalty shootout - Exact number of scored penalties
+572,Soccer Penalty shootout - Total [total] home
+573,Soccer Penalty shootout - Total [total] away
+574,Soccer Penalty shootout - Correct score
+575,Soccer Penalty shootout - Odd/Even
+576,Soccer Penalty shootout - Odd/Even home team
+577,Soccer Penalty shootout - Odd/Even away team
+578,Soccer Penalty shootout - Matchbet and total
+579,Soccer Penalty shootout - Next Penalty scored #[nr]
+580,Total [runs] runs hometeam at [dismissal!] dismissal
+581,Total [runs] runs awayteam at [dismissal!] dismissal
+582,Will there be a tie?
+583,Who will win the final?
+584,Who will win the 3rd place final?
+585,[frame!] frame - Player to pot first ball
+586,[frame!] frame - Player to pot last ball
+587,[frame!] frame - First colour potted
+588,[frame!] frame - Last points scored
+589,[frame!] frame - Race to 30
+590,[frame!] frame - Player with highest break
+591,[frame!] frame - Odd/even number of points
+592,[frame!] frame - Will there be a foul
+593,[frame!] frame - Any player with a break 50+
+594,[frame!] frame - Player 1 with a break 50+
+595,[frame!] frame - Player 2 with a break 50+
+596,[frame!] frame - Any player with a break 100+
+597,[frame!] frame - Player 1 with a break 100+
+598,[frame!] frame - Player 2 with a break 100+
+599,[frame!] frame - Highest break
+600,[frame!] frame - Total points [total]
+601,[frame!] frame - Asian Point handicap [handicap]
+602,Match will go to a deciding frame
+603,Odd/Even number of frames
+604,Correct score after [frames] frames
+605,Leader after [frames] frames
+606,Race to [frames] frames
+607,Any player to win next [frames] consecutive frames ([first]-[last])
+608,"Number of runs scored, including overtime"
+609,"Total for whole match, including overtime (3way)"
+610,"Handicap, including overtime"
+611,Highest scoring inning
+612,Which team wins more innings?
+613,Total [total] runs for innings [from]-[to]
+614,Total hometeam [total] runs for innings [from]-[to]
+615,Total awayteam [total] runs for innings [from]-[to]
+616,Over/Under Baseball
+617,Over/Under Home BASEBALL
+618,Over/Under Away BASEBALL
+619,Asian total after 5 innings
+620,Asian total hometeam after 5 innings
+621,Asian total awayteam after 5 innings
+622,Total number of games of Player 1
+623,Total number of games of Player 2
+624,Race to [points] points in game [game] of set [set]
+625,Who will win first [points] points of game [game] of set [set]
+626,Try matchbet
+627,Try Double Chance
+628,Try Draw No Bet
+629,Asian try handicap
+630,Try handicap
+631,Total tries
+632,Total tries hometeam
+633,Total tries awayteam
+634,Odd/Even number of tries
+635,1st Half - Try matchbet
+636,1st Half - Try Double Chance
+637,1st Half - Try Draw No Bet
+638,1st Half - Asian try handicap
+639,1st Half - Try handicap
+640,1st Half - Total tries
+641,1st Half - Total tries hometeam
+642,1st Half - Total tries awayteam
+643,1st Half - Odd/Even number of tries
+644,1st Half - Which team wins race to X points
+645,xth Scoring play
+646,Race to [games] games of set [set]
+647,Which team wins race to X
+648,Odd/Even points in game [game] of set [set]
+649,Double chance (1X - 12 - X2) (OT only!)
+650,Draw No Bet (OT only!)
+651,Home No Bet (OT only!)
+652,Away No Bet (OT only!)
+653,Who scores most goals in 15 minutes interval [from]-[to]
+654,Total [total] in 15 minutes interval [from]-[to]
+655,Who scores the [goal!] goal in 15 minutes interval [from]-[to]
+656,"2nd Half - Odd/Even, including overtime"
+657,"2nd Half - Draw no Bet, including overtime"
+658,"2nd Half - Asian handicap, including overtime"
+659,"2nd Half - Total, including overtime"
+660,"2nd Half - 3way, including overtime"
+661,Who scores most goals in 5 minutes interval [from]-[to]
+662,Total [total] in 5 minutes interval [from]-[to]
+663,Who scores the [goal!] goal in 5 minutes interval [from]-[to]
+664,Who scores most goals in 10 minutes interval [from]-[to]
+665,Total [total] in 10 minutes interval [from]-[to]
+666,Who scores the [goal!] goal in 10 minutes interval [from]-[to]
+667,Total Maps
+668,Correct Map Score
+669,"[mapNr!] Map - Which team will win, including overtime"
+670,[mapNr!] Map - 3way
+671,[mapNr!] Map - Total Rounds [total]
+672,[mapNr!] Map - Asian Round Handicap [handicap]
+673,[mapNr!] Map - Will there be overtime
+674,[mapNr!] Map - First Blood
+675,[mapNr!] Map [roundNr!] Round - Which team will win
+676,Asian Map Handicap [handicap]
+677,Map Handicap [handicap]
+678,Who takes most Corners in 15 minutes interval [from]-[to]
+679,Asian Corner handicap [handicap] in 15 minutes interval [from]-[to]
+680,Who takes 1st Corner in 15 minutes interval [from]-[to]
+681,Total [total] Corners in 15 minutes interval [from]-[to]
+682,Odd/Even Corners in 15 minutes interval [from]-[to]
+683,Total [total] Corners home team in 15 minutes interval [from]-[to]
+684,Total [total] Corners away team in 15 minutes interval [from]-[to]
+685,When will next goal be scored in 10 minutes interval
+686,Who takes most Corners in 10 minutes interval [from]-[to]
+687,Asian Corner handicap [handicap] in 10 minutes interval [from]-[to]
+688,Who takes 1st Corner in 10 minutes interval [from]-[to]
+689,Total [total] Corners in 10 minutes interval [from]-[to]
+690,Odd/Even Corners in 10 minutes interval [from]-[to]
+691,Total [total] Corners home team in 10 minutes interval [from]-[to]
+692,Total [total] Corners away team in 10 minutes interval [from]-[to]
+693,Who takes most Corners in 5 minutes interval [from]-[to]
+694,Asian Corner handicap [handicap] in 5 minutes interval [from]-[to]
+695,Who takes 1st Corner in 5 minutes interval [from]-[to]
+696,Total [total] Corners in 5 minutes interval [from]-[to]
+697,Odd/Even Corners in 5 minutes interval [from]-[to]
+698,Total [total] Corners home team in 5 minutes interval [from]-[to]
+699,Total [total] Corners away team in 5 minutes interval [from]-[to]
+700,[mapNr!] Map - Which team will win
+701,[mapNr!] Map - First Aegis
+702,[mapNr!] Map - First Tower
+703,[mapNr!] Map - First Barracks
+704,Which team wins race to X corners
+705,1st Half - Which team wins race to X corners
+706,Who takes the [corner!] corner
+707,1st Half - Who takes the [corner!] corner
+708,Winner
+709,"Handicap "
+710,Total
+711,2nd Half - Both teams to score
+712,Who receives most bookings in 15 minutes interval [from]-[to]
+713,Who receives most bookings in 10 minutes interval [from]-[to]
+714,Who receives most bookings in 5 minutes interval [from]-[to]
+715,Total [total] bookings in 15 minutes interval [from]-[to]
+716,Total [total] bookings in 10 minutes interval [from]-[to]
+717,Total [total] bookings in 5 minutes interval [from]-[to]
+718,Sending off in 15 minutes interval [from]-[to]
+719,Sending off in 10 minutes interval [from]-[to]
+720,Sending off in 5 minutes interval [from]-[to]
+721,Sending off home team in 15 minutes interval [from]-[to]
+722,Sending off home team in 10 minutes interval [from]-[to]
+723,Sending off home team in 5 minutes interval [from]-[to]
+724,Sending off away team in 15 minutes interval [from]-[to]
+725,Sending off away team in 10 minutes interval [from]-[to]
+726,Sending off away team in 5 minutes interval [from]-[to]
+727,[mapNr!] Map - Which team will score more kills
+728,[mapNr!] Map - Asian Kills Handicap [handicap]
+729,[mapNr!] Map - First Dragon
+730,[mapNr!] Map - First Baron
+731,[mapNr!] Map - First Inhibitor
+732,2nd Half - Matchbet and both teams to score
+733,2nd Half - Matchbet and Totals
+734,Double chance (1X - 12 - X2) and Totals
+735,Double chance (1X - 12 - X2) and both teams to score
+736,1st Half - Both teams score
+737,First Half - Matchbet and Totals [total]
+738,[goal!] goal - Strike zone
+739,Will the [penalty!] penalty be scored
+740,1st Half - Exact number of goals (AAMS)
+741,1st Half - Matchbet and both teams to score
+742,"Winning margins VBL, including overtime"
+743,Halftime - Total margins VBL
+744,Total including overtime VBL - home team
+745,Total including overtime VBL - away team
+746,Who wins the rest of the third period?
+747,Who wins the rest of the fourth period?
+748,Highest Scoring Half awayteam
+749,Highest Scoring Half hometeam
+750,Half Time / Full Time
+751,[mapNr!] Map - Total Kills [total]
+752,Total range Rugby Sevens
+753,Halftime - Total range Rugby Sevens
+754,Number of home goals
+755,Number of away goals
+756,"Halftime - Winning margins, handball"
+757,Total range
+758,1st Half - Total range
+759,Total range hometeam
+760,Total range awayteam
+761,1st Half - Total range hometeam
+762,1st Half - Total range awayteam
+763,Highest scoring team in either half
+764,[mapNr!] Map [roundNr!] Round - First Blood
+765,[mapNr!] Map - Which team wins race to [roundNr] rounds
+766,"[mapNr!] Map - Odd/Even Rounds, including overtime"
+767,"[mapNr!] Map - Total Headshots [total], including overtime"
+768,"[mapNr!] Map - Will there be an ace, including overtime"
+769,[mapNr!] Map [roundNr!] Round - Total Kills [total]
+770,[mapNr!] Map [roundNr!] Round - Asian Kills Handicap [handicap]
+771,[mapNr!] Map [roundNr!] Round - Total Kills hometeam [total]
+772,[mapNr!] Map [roundNr!] Round - Total Kills awayteam [total]
+773,[mapNr!] Map [roundNr!] Round - Bomb planted
+774,[mapNr!] Map [roundNr!] Round - Bomb defused
+775,[mapNr!] Map - Total Aegis [total]
+776,[mapNr!] Map - Total Towers [total]
+777,Maximum consecutive runs by either team
+778,When will the match be decided
+779,"When will the [runNr!] run be scored, including overtime"
+780,Total scoreless innings
+781,"Both teams over [total], including overtime"
+782,"First 5 innings and Matchbet, including overtime"
+783,Who scores most runs for innings [from]-[to]
+784,Asian handicap for innings [from]-[to]
+785,Odd/Even for innings [from]-[to]
+786,Asian handicap for [inningNr!] inning
+787,Total hometeam for [inningNr!] inning
+788,Total awayteam for [inningNr!] inning
+789,Hometeam to score for [inningNr!] inning
+790,Awayteam to score for [inningNr!] inning
+791,Both teams to score for [inningNr!] inning
+792,[mapNr!] Map 1st Half - Which team will win
+793,"Winning margins, aussie rules"
+794,"Total range, aussie rules"
+795,"Halftime - Winning margins, aussie rules"
+796,"1st Half - Total range, aussie rules"
+797,"Winning margins for [periodNr!] period, aussie rules"
+798,"Total range for [periodNr!] period, aussie rules"
+799,[mapNr!] Map - Total Dragons [total]
+800,[mapNr!] Map - Total Barons [total]
+801,1st Half - Correct Score
+802,Away team to win
+803,Home team to win
+804,Any team to win
+805,"Next goal scorer, including own goal"
+806,"Player to score, including overtime"
+807,Next goal scorer and 1x2
+808,Anytime goal scorer and 1x2
+809,Next goal scorer and correct score
+810,Anytime goal scorer and correct score
+811,Player to score 2+
+812,Player to score 3+
+813,Next goal scorer - home team
+814,Next goal scorer - away team
+815,Total [total] goals in 1 minute interval [from]-[to]
+816,Total [total] corners in 1 minute interval [from]-[to]
+817,Total [total] bookings in 1 minute interval [from]-[to]
+818,Total [total] offsides in 1 minute interval [from]-[to]
+819,Total [total] penalties awarded in 1 minute interval [from]-[to]
+820,Which player will win the tiebreak
+821,Correct score in tennis tiebreak
+822,Over/under [total] number of points in tiebreak of set [setNr]
+823,Next scoring type
+824,Exact number of goals (AAMS)
+825,Overtime - correct score
+826,halftime/fulltime
+827,[touchdownNr!] touchdown scorer (incl. overtime)
+828,Total sets
+829,Anytime goalscorer
+830,Player to score a point
+831,[!quarternr] quarter - race to [pointnr] points
+832,race to [pointnr] points
+833,Next Score Kind
+834,Next Score Kind Home
+835,Next Score Kind Away
+836,"Any team scoring type xth point, including overtime"
+837,Result of [pitchnr!] pitch
+838,Hit on [pitchnr!] pitch
+839,Home run on [pitchnr!] pitch
+840,Result of [hitnr!] hit
+841,Result of player xth time at bat
+842,Player to strike out xth time at bat
+843,Clean Sheet Home Team
+844,Clean Sheet Away Team
+845,1st Half - Total Home Team
+846,1st Half - Total Away Team
+847,Total hits (incl. extra innings)
+848,Home team total hits (incl. extra innings)
+849,Away team total hits (incl. extra innings)
+850,Xth inning - Total hits
+851,Xth inning - Home team total hits
+852,Xth inning - Away team total hits
+853,Innings 1 to 5 - Total hits
+854,Innings 1 to 5 - Home team total hits
+855,Innings 1 to 5 - Away team total hits
+856,[driveNr!] drive play [playNr] - [team%] play type
+857,[driveNr!] drive play [playNr] - [team%] pass completion
+858,[driveNr!] drive play [playNr] - [team%] total yards gained
+859,[driveNr!] drive play [playNr] - [team%] new first down
+860,[driveNr!] drive play [playNr] - [team%] sack
+861,[driveNr!] drive - [team%] result
+862,"2nd Half - Draw no Bet, including overtime"
+863,"2nd Half - Asian handicap, including overtime"
+864,"2nd Half - Total, including overtime"
+865,"2nd Half - 3way, including overtime"
+866,Set Handicap
+867,"Scoring type xth point, including overtime"

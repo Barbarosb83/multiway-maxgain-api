@@ -18,14 +18,29 @@ from app.services.max_gain import (
 )
 from tests.reference import brute_force_max_gain
 
-MS = 1  # Maç Sonucu (1X2)
-CS = 2  # Çift Şans
-UNKNOWN = 9001  # katalogda olmayan
+# Gerçek katalogdan (pre-match uzayı) -- bkz. data/odd_types_pre.csv
+MS = 1565  # 3way            -> Maç Sonucu (1X2)
+CS = 1481  # Double Chance   -> Çift Şans
+OU = 1500  # Over/Under      -> Alt / Üst (specialBetValue gerektirir)
+HC = 1493  # Handicap        -> Handikap  (specialBetValue gerektirir)
+UNKNOWN = 9001  # hiçbir katalogda olmayan
 
 
-def s(match_id: str, odd_type_id: int, outcome: str, odds: str) -> SelectionInput:
+def s(
+    match_id: str,
+    odd_type_id: int,
+    outcome: str,
+    odds: str,
+    special: str | None = None,
+    is_live: int = 0,
+) -> SelectionInput:
     return SelectionInput(
-        match_id=match_id, odd_type_id=odd_type_id, outcome=outcome, odds=Decimal(odds)
+        match_id=match_id,
+        odd_type_id=odd_type_id,
+        outcome=outcome,
+        odds=Decimal(odds),
+        special_bet_value=special,
+        is_live=is_live,
     )
 
 
@@ -80,7 +95,7 @@ def test_three_way_overlap_picks_best_compatible_subset():
     group = result.matches[0].groups[0]
     assert result.matches[0].weight == Decimal("4.60")
     assert {w.outcome for w in group.winning_selections} == {"1", "1X"}
-    assert group.scoreline == {"half_time": "0-0", "full_time": "1-0"}
+    assert group.scoreline == {"full_time": "1-0"}  # sadece MS piyasaları -> 2 boyutlu uzay
 
 
 def test_best_subset_can_beat_the_single_highest_odds():
@@ -95,7 +110,7 @@ def test_best_subset_can_beat_the_single_highest_odds():
     group = result.matches[0].groups[0]
     assert result.matches[0].weight == Decimal("4.70")
     assert {w.outcome for w in group.winning_selections} == {"X", "X2"}
-    assert group.scoreline == {"half_time": "0-0", "full_time": "0-0"}
+    assert group.scoreline == {"full_time": "0-0"}
 
 
 def test_unknown_odd_type_falls_back_and_warns():
@@ -108,7 +123,7 @@ def test_unknown_odd_type_falls_back_and_warns():
         )
     )
     assert result.matches[0].weight == Decimal("4.50")
-    assert any("katalogda yok" in w for w in result.warnings)
+    assert any("katalogunda yok" in w for w in result.warnings)
 
 
 def test_unparseable_outcome_is_isolated_and_warns():
@@ -118,9 +133,68 @@ def test_unparseable_outcome_is_isolated_and_warns():
 
 
 def test_impossible_outcome_is_isolated_rather_than_zeroing_the_match():
-    """Modellenen skor aralığı dışındaki doğru skor maçı sıfırlamamalı."""
-    result = calculate_max_gain(coupon(s("m1", 3, "1", "2.00")))  # id 3 katalogda yok
+    """Modellenen skor uzayına sığmayan eşik maçı sıfırlamamalı."""
+    result = calculate_max_gain(coupon(s("m1", OU, "Üst", "2.00", "999.5")))
     assert result.matches[0].weight == Decimal("2.00")
+    assert any("hiçbir senaryoyla eşleşmiyor" in w for w in result.warnings)
+
+
+# --------------------------------------------------------------------------- #
+# specialBetValue -- eşik ayrı alandan gelir
+# --------------------------------------------------------------------------- #
+
+
+def test_same_market_contradictory_lines_take_the_maximum():
+    """Alt 0.5 ile Üst 2.5 birlikte tutamaz; oranı yüksek olan sayılır."""
+    result = calculate_max_gain(
+        coupon(s("m1", OU, "Alt", "1.90", "0.5"), s("m1", OU, "Üst", "2.40", "2.5"))
+    )
+    group = result.matches[0].groups[0]
+    assert result.matches[0].weight == Decimal("2.40")
+    assert group.combined is False
+    assert [w.special_bet_value for w in group.winning_selections] == ["2.5"]
+
+
+def test_same_market_compatible_lines_are_summed():
+    """Üst 0.5 ile Üst 2.5: toplam 3+ olduğunda ikisi de tutar."""
+    result = calculate_max_gain(
+        coupon(s("m1", OU, "Üst", "1.20", "0.5"), s("m1", OU, "Üst", "2.40", "2.5"))
+    )
+    assert result.matches[0].weight == Decimal("3.60")
+    assert result.matches[0].groups[0].combined is True
+
+
+def test_result_and_total_contradiction_is_detected():
+    """Deplasman kazanırsa en az bir gol vardır; 'Alt 0.5' ile çelişir."""
+    result = calculate_max_gain(coupon(s("m1", MS, "2", "3.00"), s("m1", OU, "Alt", "1.90", "0.5")))
+    assert result.matches[0].weight == Decimal("3.00")
+
+
+def test_handicap_uses_special_bet_value():
+    """Handikap 0:1 -> ev sahibi 2+ farkla kazanmalı; düz galibiyetle uyumlu."""
+    result = calculate_max_gain(coupon(s("m1", HC, "1", "2.50", "0:1"), s("m1", MS, "1", "1.80")))
+    assert result.matches[0].weight == Decimal("4.30")
+
+
+def test_large_bound_market_uses_a_wider_score_space():
+    """Basketbol sayı eşikleri futbol aralığına sığmaz; uzay maça göre büyür."""
+    result = calculate_max_gain(
+        coupon(s("m1", OU, "Üst", "1.85", "220.5"), s("m1", OU, "Alt", "1.95", "200.5"))
+    )
+    assert result.matches[0].weight == Decimal("1.95")  # çelişkili -> max
+    assert not result.warnings
+
+
+def test_live_and_pre_ids_are_separate_namespaces():
+    """Aynı sayısal id, live ve pre kataloglarında farklı piyasalardır."""
+    live = calculate_max_gain(
+        coupon(s("m1", 24, "1X", "1.40", is_live=1))
+    )  # live 24 = Double Chance
+    assert live.matches[0].groups[0].winning_selections[0].odd_type_name == "Double Chance (ALL)"
+    assert not live.warnings
+
+    pre = calculate_max_gain(coupon(s("m1", 24, "1X", "1.40", is_live=0)))
+    assert pre.warnings  # pre uzayında 24 diye bir id yok
 
 
 # --------------------------------------------------------------------------- #
@@ -332,7 +406,21 @@ def test_system_with_all_bankers_rejected():
 # Kaba kuvvet çapraz doğrulama
 # --------------------------------------------------------------------------- #
 
-_OUTCOMES = [(MS, "1"), (MS, "X"), (MS, "2"), (CS, "1X"), (CS, "12"), (CS, "X2"), (UNKNOWN, "A")]
+_OUTCOMES = [
+    (MS, "1", None),
+    (MS, "X", None),
+    (MS, "2", None),
+    (CS, "1X", None),
+    (CS, "12", None),
+    (CS, "X2", None),
+    (OU, "Alt", "2.5"),
+    (OU, "Üst", "2.5"),
+    (OU, "Alt", "0.5"),
+    (OU, "Üst", "3.5"),
+    (HC, "1", "0:1"),
+    (HC, "2", "1:0"),
+    (UNKNOWN, "A", None),
+]
 
 
 def _random_coupon(rng: random.Random) -> CouponInput:
@@ -341,9 +429,9 @@ def _random_coupon(rng: random.Random) -> CouponInput:
 
     for match_id in match_ids:
         picks = rng.sample(_OUTCOMES, rng.randint(1, 3))
-        for odd_type_id, outcome in picks:
+        for odd_type_id, outcome, special in picks:
             selections.append(
-                s(match_id, odd_type_id, outcome, str(round(rng.uniform(1.05, 6.0), 2)))
+                s(match_id, odd_type_id, outcome, str(round(rng.uniform(1.05, 6.0), 2)), special)
             )
 
     bankers = frozenset(m for m in match_ids if rng.random() < 0.25)

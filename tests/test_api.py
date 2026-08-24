@@ -9,11 +9,16 @@ from app.main import app
 
 client = TestClient(app)
 
+# Gerçek katalogdan (pre-match uzayı)
+MS = 1565  # 3way          -> Maç Sonucu (1X2)
+CS = 1481  # Double Chance -> Çift Şans
+OU = 1500  # Over/Under    -> Alt / Üst
+
 BASE_COUPON = {
     "couponAmount": "100.00",
     "selections": [
-        {"matchId": 901, "oddTypeId": 1, "outcome": "1", "odds": "2.00"},
-        {"matchId": 902, "oddTypeId": 1, "outcome": "2", "odds": "3.00"},
+        {"matchId": 901, "oddTypeId": MS, "outcome": "1", "odds": "2.00"},
+        {"matchId": 902, "oddTypeId": MS, "outcome": "2", "odds": "3.00"},
     ],
 }
 
@@ -44,11 +49,105 @@ def test_openapi_schema_is_generated():
 
 
 def test_odd_type_catalog_is_exposed():
-    rows = client.get("/api/v1/odd-types").json()
-    by_id = {row["oddTypeId"]: row for row in rows}
-    assert by_id[1]["name"] == "Maç Sonucu (1X2)"
-    assert by_id[2]["name"] == "Çift Şans"
-    assert "1X" in by_id[2]["exampleOutcomes"]
+    page = client.get("/api/v1/odd-types", params={"limit": 1}).json()
+    assert page["total"] == 1426  # pre + live, iki katalog birden
+    assert len(page["items"]) == 1
+
+
+def test_odd_type_catalog_filters_by_namespace_and_name():
+    pre = client.get("/api/v1/odd-types", params={"isLive": 0, "q": "double chance"}).json()
+    assert all(item["isLive"] == 0 for item in pre["items"])
+    # Arama devre varyantlarını da bulur; tam maç çift şansı bunlardan biridir.
+    mapped = {i["marketId"] for i in pre["items"] if i["mapped"]}
+    assert "CIFT_SANS" in mapped
+    assert mapped <= {"CIFT_SANS", "IY_CIFT_SANS", "IY2_CIFT_SANS"}
+
+    live = client.get("/api/v1/odd-types", params={"isLive": 1, "q": "double chance"}).json()
+    assert all(item["isLive"] == 1 for item in live["items"])
+    assert live["total"] != pre["total"]  # ayrı id uzayları
+
+
+def test_odd_type_catalog_marks_markets_needing_special_bet_value():
+    page = client.get("/api/v1/odd-types", params={"q": "over/under", "limit": 500}).json()
+    over_under = [i for i in page["items"] if i["mapped"]]
+    assert over_under
+    assert all(i["needsSpecialBetValue"] for i in over_under)
+
+
+# --------------------------------------------------------------------------- #
+# specialBetValue
+# --------------------------------------------------------------------------- #
+
+
+def test_contradictory_lines_on_same_market_take_the_maximum():
+    """Over/Under Alt 0.5 + Üst 2.5: ikisi birden kazanamaz."""
+    body = post(
+        {
+            "couponAmount": "100.00",
+            "selections": [
+                {
+                    "matchId": 901,
+                    "oddTypeId": OU,
+                    "outcome": "Alt",
+                    "specialBetValue": "0.5",
+                    "odds": "1.90",
+                },
+                {
+                    "matchId": 901,
+                    "oddTypeId": OU,
+                    "outcome": "Üst",
+                    "specialBetValue": "2.5",
+                    "odds": "2.40",
+                },
+            ],
+        }
+    )
+    group = body["matches"][0]["groups"][0]
+    assert body["matches"][0]["weight"] == "2.40"
+    assert group["combined"] is False
+    assert group["winningSelections"][0]["specialBetValue"] == "2.5"
+
+
+def test_compatible_lines_on_same_market_are_summed():
+    """Üst 0.5 + Üst 2.5: toplam 3+ olduğunda ikisi de tutar."""
+    body = post(
+        {
+            "couponAmount": "100.00",
+            "selections": [
+                {
+                    "matchId": 901,
+                    "oddTypeId": OU,
+                    "outcome": "Üst",
+                    "specialBetValue": "0.5",
+                    "odds": "1.20",
+                },
+                {
+                    "matchId": 901,
+                    "oddTypeId": OU,
+                    "outcome": "Üst",
+                    "specialBetValue": "2.5",
+                    "odds": "2.40",
+                },
+            ],
+        }
+    )
+    assert body["matches"][0]["weight"] == "3.60"
+    assert body["matches"][0]["groups"][0]["combined"] is True
+
+
+def test_live_flag_selects_the_live_namespace():
+    body = post(
+        {
+            "couponAmount": "100.00",
+            "selections": [
+                {"matchId": 901, "oddTypeId": 24, "isLive": 1, "outcome": "1X", "odds": "1.40"}
+            ],
+        }
+    )
+    winner = body["matches"][0]["groups"][0]["winningSelections"][0]
+    assert winner["oddTypeName"] == "Double Chance (ALL)"
+    assert winner["isLive"] == 1
+    assert body["warnings"] == []
 
 
 # --------------------------------------------------------------------------- #
@@ -62,8 +161,8 @@ def test_compatible_selections_are_summed():
         {
             "couponAmount": "100.00",
             "selections": [
-                {"matchId": 901, "oddTypeId": 1, "outcome": "1", "odds": "2.10"},
-                {"matchId": 901, "oddTypeId": 2, "outcome": "1X", "odds": "1.30"},
+                {"matchId": 901, "oddTypeId": MS, "outcome": "1", "odds": "2.10"},
+                {"matchId": 901, "oddTypeId": CS, "outcome": "1X", "odds": "1.30"},
             ],
         }
     )
@@ -79,8 +178,8 @@ def test_contradictory_selections_take_the_maximum():
         {
             "couponAmount": "100.00",
             "selections": [
-                {"matchId": 901, "oddTypeId": 1, "outcome": "1", "odds": "2.10"},
-                {"matchId": 901, "oddTypeId": 2, "outcome": "X2", "odds": "1.45"},
+                {"matchId": 901, "oddTypeId": MS, "outcome": "1", "odds": "2.10"},
+                {"matchId": 901, "oddTypeId": CS, "outcome": "X2", "odds": "1.45"},
             ],
         }
     )
@@ -93,8 +192,8 @@ def test_same_odd_type_twice_takes_the_maximum():
         {
             "couponAmount": "100.00",
             "selections": [
-                {"matchId": 901, "oddTypeId": 1, "outcome": "1", "odds": "2.10"},
-                {"matchId": 901, "oddTypeId": 1, "outcome": "X", "odds": "3.40"},
+                {"matchId": 901, "oddTypeId": MS, "outcome": "1", "odds": "2.10"},
+                {"matchId": 901, "oddTypeId": MS, "outcome": "X", "odds": "3.40"},
             ],
         }
     )
@@ -106,13 +205,13 @@ def test_unknown_odd_type_is_accepted_with_warning():
         {
             "couponAmount": "100.00",
             "selections": [
-                {"matchId": 901, "oddTypeId": 1, "outcome": "1", "odds": "2.00"},
-                {"matchId": 901, "oddTypeId": 4242, "outcome": "Üst", "odds": "1.60"},
+                {"matchId": 901, "oddTypeId": MS, "outcome": "1", "odds": "2.00"},
+                {"matchId": 901, "oddTypeId": 99999, "outcome": "Üst", "odds": "1.60"},
             ],
         }
     )
     assert body["matches"][0]["weight"] == "3.60"  # farklı grup -> toplandı
-    assert any("katalogda yok" in w for w in body["warnings"])
+    assert any("katalogunda yok" in w for w in body["warnings"])
 
 
 # --------------------------------------------------------------------------- #
@@ -131,7 +230,7 @@ def test_match_id_type_is_preserved():
     assert post(BASE_COUPON)["matches"][0]["matchId"] == 901
     string_ids = {
         "couponAmount": "10.00",
-        "selections": [{"matchId": "abc-1", "oddTypeId": 1, "outcome": "1", "odds": "2.00"}],
+        "selections": [{"matchId": "abc-1", "oddTypeId": MS, "outcome": "1", "odds": "2.00"}],
     }
     assert post(string_ids)["matches"][0]["matchId"] == "abc-1"
 
@@ -145,11 +244,11 @@ def test_multiway_with_system_and_banker():
             "system": {"sizes": [2]},
             "bankerMatchIds": [900],
             "selections": [
-                {"matchId": 900, "oddTypeId": 1, "outcome": "1", "odds": "1.50"},
-                {"matchId": 901, "oddTypeId": 1, "outcome": "1", "odds": "2.00"},
-                {"matchId": 901, "oddTypeId": 2, "outcome": "1X", "odds": "1.30"},
-                {"matchId": 902, "oddTypeId": 1, "outcome": "2", "odds": "4.00"},
-                {"matchId": 903, "oddTypeId": 1, "outcome": "1", "odds": "1.80"},
+                {"matchId": 900, "oddTypeId": MS, "outcome": "1", "odds": "1.50"},
+                {"matchId": 901, "oddTypeId": MS, "outcome": "1", "odds": "2.00"},
+                {"matchId": 901, "oddTypeId": CS, "outcome": "1X", "odds": "1.30"},
+                {"matchId": 902, "oddTypeId": MS, "outcome": "2", "odds": "4.00"},
+                {"matchId": 903, "oddTypeId": MS, "outcome": "1", "odds": "1.80"},
             ],
         }
     )
@@ -201,8 +300,8 @@ def test_batch_rejects_empty_list():
         {"currency": "TURKISH"},
         {"system": {"sizes": [9]}},
         {"bankerMatchIds": [12345]},
-        {"selections": [{"matchId": 1, "oddTypeId": 1, "outcome": "1", "odds": "0.90"}]},
-        {"selections": [{"matchId": 1, "oddTypeId": 1, "odds": "2.00"}]},
+        {"selections": [{"matchId": 1, "oddTypeId": MS, "outcome": "1", "odds": "0.90"}]},
+        {"selections": [{"matchId": 1, "oddTypeId": MS, "odds": "2.00"}]},
         {"unknownField": 1},
     ],
 )
@@ -216,8 +315,8 @@ def test_duplicate_selection_returns_422():
     payload = {
         "couponAmount": "100.00",
         "selections": [
-            {"matchId": 901, "oddTypeId": 1, "outcome": "1", "odds": "2.00"},
-            {"matchId": 901, "oddTypeId": 1, "outcome": "1", "odds": "3.00"},
+            {"matchId": 901, "oddTypeId": MS, "outcome": "1", "odds": "2.00"},
+            {"matchId": 901, "oddTypeId": MS, "outcome": "1", "odds": "3.00"},
         ],
     }
     assert client.post("/api/v1/coupons/max-gain", json=payload).status_code == 422
@@ -230,7 +329,7 @@ def test_large_system_completes_quickly():
             "couponAmount": "100.00",
             "system": {"sizes": [3]},
             "selections": [
-                {"matchId": i, "oddTypeId": 1, "outcome": "1", "odds": "2.00"} for i in range(20)
+                {"matchId": i, "oddTypeId": MS, "outcome": "1", "odds": "2.00"} for i in range(20)
             ],
         }
     )

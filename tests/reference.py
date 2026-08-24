@@ -1,13 +1,18 @@
 """Kaba kuvvet referans uygulaması -- yalnızca testlerde kullanılır.
 
-Motorun hiçbir kısayolunu paylaşmaz: tüm satırları açıkça üretir, maçların tüm
-sonuç senaryolarını tek tek dolaşır ve her senaryoda kazanan satırların
-ödemesini toplar. Yalnızca *tanımı* uygular::
+Motorun hiçbir kısayolunu paylaşmaz:
 
-    max_gain = max ( Σ kazanan satırların ödemesi )
-               senaryolar
+* uyumlu alt küme aramasını (budamalı DFS) kullanmaz; bir maçtaki kazanan
+  seçim kümelerini sonuç uzayının **her atomunu** tek tek deneyerek bulur,
+* elementer simetrik polinomu kullanmaz; tüm satırları açıkça üretir ve tüm
+  sonuç senaryolarını dolaşarak yalnızca tanımı uygular::
 
-Üstel karmaşıklıkta olduğu için sadece küçük kuponlarda çalıştırılabilir.
+      max_gain = max ( Σ kazanan satırların ödemesi )
+                 senaryolar
+
+Üstel karmaşıklıkta olduğu için sadece küçük kuponlarda çalıştırılabilir ve
+sabit bir skor uzayı (``JOINT``, tavan 8) varsayar; testler bu sınır içinde
+kalan kuponlar üretir.
 """
 
 from __future__ import annotations
@@ -16,49 +21,59 @@ import itertools
 from collections import OrderedDict
 from decimal import ROUND_DOWN, Decimal, localcontext
 
-from app.services.markets import ATOMS, UnknownOutcome, mask_for
+from app.services.markets import UnknownOutcome, get_space, mask_for, required_bound
 from app.services.max_gain import CouponInput, SelectionInput
 from app.services.odd_types import resolve_odd_type
 
+REFERENCE_BOUND = 8
+_SPACE = get_space("JOINT", REFERENCE_BOUND)
+
+
+def _selection_mask(selection: SelectionInput) -> int | None:
+    """Seçimin kazandığı atom maskesi; çözümlenemiyorsa None (yalıtılır)."""
+    info = resolve_odd_type(selection.odd_type_id, selection.is_live)
+    if info.market is None:
+        return None
+    try:
+        if required_bound(info.market.id, selection.outcome, selection.special_bet_value) > (
+            REFERENCE_BOUND
+        ):
+            return None
+        mask = mask_for(info.market.id, selection.outcome, selection.special_bet_value, _SPACE.key)
+    except UnknownOutcome:
+        return None
+    return mask or None
+
 
 def _match_scenarios(selections: list[SelectionInput]) -> list[frozenset[int]]:
-    """Bir maçta gerçekleşebilecek *farklı* kazanan-seçim kümelerini üretir.
-
-    Gol bazlı seçimler için 1296 atomun tamamı taranır; katalogda olmayan
-    oddType'lar kendi yalıtılmış grubunda en fazla bir kazanan üretir.
-    """
-    goal_items: list[tuple[int, int]] = []
+    """Bir maçta gerçekleşebilecek *farklı* kazanan-seçim kümeleri."""
+    scored: list[tuple[int, int]] = []
     isolated: OrderedDict[str, list[int]] = OrderedDict()
 
     for index, selection in enumerate(selections):
-        info = resolve_odd_type(selection.odd_type_id)
-        mask = 0
-        if info.market is not None:
-            try:
-                mask = mask_for(info.market.id, selection.outcome)
-            except UnknownOutcome:
-                mask = 0
-        if mask:
-            goal_items.append((index, mask))
+        mask = _selection_mask(selection)
+        if mask is None:
+            key = f"iso:{selection.is_live}:{selection.odd_type_id}"
+            isolated.setdefault(key, []).append(index)
         else:
-            isolated.setdefault(f"iso:{selection.odd_type_id}", []).append(index)
+            scored.append((index, mask))
 
-    if goal_items:
-        goal_subsets = {
-            frozenset(index for index, mask in goal_items if mask & (1 << atom))
-            for atom in range(len(ATOMS))
+    if scored:
+        score_subsets = {
+            frozenset(index for index, mask in scored if mask & (1 << atom))
+            for atom in range(len(_SPACE.atoms))
         }
     else:
-        goal_subsets = {frozenset()}
+        score_subsets = {frozenset()}
 
     isolated_choices = [
         [frozenset()] + [frozenset({index}) for index in indexes] for indexes in isolated.values()
     ]
 
     scenarios: set[frozenset[int]] = set()
-    for goals in goal_subsets:
+    for base in score_subsets:
         for combo in itertools.product(*isolated_choices) if isolated_choices else [()]:
-            merged = set(goals)
+            merged = set(base)
             for choice in combo:
                 merged |= choice
             scenarios.add(frozenset(merged))
@@ -106,8 +121,8 @@ def _brute(coupon: CouponInput) -> tuple[Decimal, int]:
         else coupon.coupon_amount / Decimal(line_count)
     )
 
-    scenarios_per_match = [_match_scenarios(by_match[m]) for m in by_match]
     match_order = list(by_match)
+    scenarios_per_match = [_match_scenarios(by_match[m]) for m in match_order]
 
     best = Decimal(0)
     for realization in itertools.product(*scenarios_per_match):

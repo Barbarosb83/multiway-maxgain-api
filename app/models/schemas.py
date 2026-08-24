@@ -36,9 +36,23 @@ class SelectionIn(StrictBase):
     match_id: MatchId = Field(description="Maç kimliği; aynı maça birden fazla seçim gelebilir")
     odd_type_id: int = Field(ge=0, description="Piyasa kimliği; katalog için GET /api/v1/odd-types")
     outcome: str = Field(
-        min_length=1, max_length=64, description="Sonuç kodu, ör. '1', 'X2', '2.5 Üst', '2-1'"
+        min_length=1, max_length=64, description="Sonuç kodu, ör. '1', 'X2', 'Üst', '2-1'"
     )
     odds: Odds = Field(description="Ondalık oran; 1.00'den büyük olmalı")
+    is_live: int = Field(
+        default=0,
+        ge=0,
+        le=1,
+        description="Event pre-match ise 0, live ise 1; oddTypeId o katalogda aranır.",
+    )
+    special_bet_value: str | None = Field(
+        default=None,
+        max_length=32,
+        description=(
+            "Piyasanın eşik değeri: Alt/Üst için '2.5', handikap için '0:1' ya da "
+            "'-1.5'. Gerektiren piyasalarda zorunludur."
+        ),
+    )
 
 
 class SystemIn(StrictBase):
@@ -63,10 +77,35 @@ class CouponIn(StrictBase):
                     "system": {"sizes": [2]},
                     "bankerMatchIds": [903],
                     "selections": [
-                        {"matchId": 901, "oddTypeId": 1, "outcome": "1", "odds": "2.10"},
-                        {"matchId": 901, "oddTypeId": 2, "outcome": "1X", "odds": "1.30"},
-                        {"matchId": 902, "oddTypeId": 1, "outcome": "2", "odds": "2.75"},
-                        {"matchId": 903, "oddTypeId": 1, "outcome": "1", "odds": "1.90"},
+                        {
+                            "matchId": 901,
+                            "oddTypeId": 1565,
+                            "isLive": 0,
+                            "outcome": "1",
+                            "odds": "2.10",
+                        },
+                        {
+                            "matchId": 901,
+                            "oddTypeId": 1481,
+                            "isLive": 0,
+                            "outcome": "1X",
+                            "odds": "1.30",
+                        },
+                        {
+                            "matchId": 902,
+                            "oddTypeId": 1500,
+                            "isLive": 0,
+                            "outcome": "Üst",
+                            "specialBetValue": "2.5",
+                            "odds": "2.75",
+                        },
+                        {
+                            "matchId": 903,
+                            "oddTypeId": 1565,
+                            "isLive": 0,
+                            "outcome": "1",
+                            "odds": "1.90",
+                        },
                     ],
                 }
             ]
@@ -102,17 +141,22 @@ class CouponIn(StrictBase):
 
     @model_validator(mode="after")
     def _check_selections_unique(self) -> CouponIn:
-        seen: set[tuple[str, int, str]] = set()
+        seen: set[tuple[str, int, int, str, str]] = set()
         for selection in self.selections:
+            # specialBetValue anahtarın parçasıdır: "Üst 0.5" ile "Üst 2.5" aynı
+            # piyasanın farklı çizgileridir ve birlikte oynanabilir.
             key = (
                 str(selection.match_id),
+                selection.is_live,
                 selection.odd_type_id,
                 selection.outcome.strip().upper(),
+                (selection.special_bet_value or "").strip().upper(),
             )
             if key in seen:
                 raise ValueError(
                     f"Aynı seçim iki kez gönderildi: maç {selection.match_id}, "
-                    f"oddType {selection.odd_type_id}, outcome {selection.outcome!r}."
+                    f"oddType {selection.odd_type_id}, outcome {selection.outcome!r}, "
+                    f"specialBetValue {selection.special_bet_value!r}."
                 )
             seen.add(key)
 
@@ -129,15 +173,23 @@ class CouponIn(StrictBase):
 
 
 class ScorelineOut(Base):
-    half_time: str = Field(description="En iyi senaryodaki ilk yarı skoru")
-    full_time: str = Field(description="En iyi senaryodaki maç sonu skoru")
+    """Grubu gerçekleyen örnek skor.
+
+    Kullanılan sonuç uzayına göre yalnızca biri dolu olabilir: sadece maç sonu
+    piyasaları içeren bir grupta ilk yarı skoru modellenmez.
+    """
+
+    half_time: str | None = Field(default=None, description="En iyi senaryodaki ilk yarı skoru")
+    full_time: str | None = Field(default=None, description="En iyi senaryodaki maç sonu skoru")
 
 
 class WinningSelectionOut(Base):
     odd_type_id: int
     odd_type_name: str
+    is_live: int
     outcome: str
     odds: Decimal
+    special_bet_value: str | None = None
 
 
 class GroupResolutionOut(Base):
@@ -195,10 +247,20 @@ class MaxGainOut(Base):
 
 class OddTypeOut(Base):
     odd_type_id: int
+    is_live: int
     name: str
-    market_id: str
-    group: str
-    example_outcomes: list[str]
+    mapped: bool = Field(description="False ise anlamı eşlenmemiş; hesapta geri düşüş uygulanır")
+    market_id: str | None = None
+    market_label: str | None = None
+    example_outcomes: list[str] = Field(default_factory=list)
+    needs_special_bet_value: bool = False
+
+
+class OddTypePage(Base):
+    total: int
+    limit: int
+    offset: int
+    items: list[OddTypeOut]
 
 
 class ErrorOut(Base):

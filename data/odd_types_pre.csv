@@ -1,0 +1,559 @@
+﻿1456,Correct Score
+1457,3-balls
+1458,Championship Outrights
+1459,Short Term Outrights
+1460,First Team to Score
+1461,First team to Score
+1462,1st Half -1X2
+1463,1st Half - Winner
+1464,1st Half - 3way
+1465,1st Half - Winner
+1466,1st Half - 3way
+1467,Both Teams to Score
+1468,Both teams to score
+1469,Halftime / Fulltime
+1470,Halftime/Fulltime
+1471,Halftime/Fulltime
+1472,Halftime/Fulltime
+1473,Halftime/Fulltime
+1474,Odd / Even Goals
+1475,Odd/Even goals
+1476,Odd/Even goals
+1477,Odd/Even number of runs (excl. superovers)
+1478,Odd/Even Points
+1479,Odd/Even Points
+1480,Odd/Even Points
+1481,Double Chance
+1482,Double Chance
+1483,Double Chance
+1484,Draw No Bet
+1485,Draw no bet
+1486,Draw no bet
+1487,Goals Home
+1488,Goals Away
+1489,Podium Finish
+1490,Asian Handicap
+1491,Frame Handicap
+1492,Goal Spreads
+1493,"Handicap "
+1494,Handicap
+1495,Handicap
+1496,Points Spread
+1497,Points Spreads
+1498,Asian Total
+1499,Total Frames
+1500,Over/Under
+1501,Total Spreads
+1502,Over/Under
+1503,Total Spreads (excl. superovers)
+1504,1st Half - Asian Handicap
+1505,1st Half - Goal Spread
+1506,1st Half - Handicap
+1507,1st Half - Points Spread
+1508,1st Half - Points Spreads
+1509,1st Half - Asian Total
+1510,1st Half - Over/Under
+1511,1st Half - Over/Under
+1512,1st Half - Over/Under
+1513,European Handicap
+1514,European Handicap
+1515,European Handicap
+1516,Totals
+1517,Totals
+1518,First goalscorer
+1519,Total Goals
+1520,1st Half - Correct Score
+1521,1st Set – Winner
+1522,1st Set Winner
+1523,First Frame Winner
+1524,Who wins first set
+1525,Who wins first set
+1526,Total Number of Sets (best of 3)
+1527,Total number of sets (best of 3)
+1528,Highest Scoring Half
+1529,Highest Scoring Half
+1530,Highest Scoring Half
+1531,Matchbet + Totals
+1532,Matchbet and Totals
+1533,Matchbet and Totals
+1534,Matchbet and Totals
+1535,Matchbet and Totals
+1536,Matchflow
+1537,1st Period - 3way
+1538,3rd Period - 3way
+1539,1st Period – Total
+1540,2nd Period – Total
+1541,3rd Period – Total
+1542,1st Period - Double Chance
+1543,2nd Period - Double Chance
+1544,3rd Period - Double Chance
+1545,Odd/Even goals (Inc. OT and Penalty Shootout)
+1546,1st Half - Odd/Even Goals
+1547,1st Half - Odd/Even Points
+1548,1st Half - Odd/Even Points
+1549,1st Half – Odd/Even Points
+1550,Overtime yes/no
+1551,Overtime
+1552,Overtime
+1553,Overtime Yes/No
+1554,Overtime Yes/No
+1555,Will there be super overs
+1556,Winning margins
+1557,Winning Margins
+1558,Winning Margins
+1559,Winning Margins
+1560,Winning Margins
+1561,Winning Margins
+1562,1st Half - 2way
+1563,Highest Scoring Quarter
+1564,Highest Scoring Quarter
+1565,3way
+1566,3way
+1567,3way
+1568,Set Total
+1569,Total Games
+1570,Total
+1571,Total
+1572,Highest Scoring Period
+1573,Goal Spreads (incl. OT)
+1574,Handicap
+1575,Handicap
+1576,Total Spreads (incl. OT)
+1577,Over/Under
+1578,Total (İncluding Overtime)
+1579,Odd/Even Points (overtime)
+1580,Odd/Even Runs (Overtime)
+1581,2nd Set Winner
+1582,Who wins second set
+1583,Who wins second set
+1584,Total Number of Sets (best of 5)
+1585,Total number of sets (best of 5)
+1586,Correct Set Score
+1587,Correct Set Score (BO3)
+1588,Correct Frame Score (best of 5 frames)
+1589,Correct Set Score (best of 5 sets)
+1590,Correct Set Score (BO5)
+1591,Anytime goalscorer
+1592,Total number of bookings
+1593,1st Half - Total Number of Bookings
+1594,Total number of booking points
+1595,1st Half - Total Number of Booking Points
+1596,Player sent off?
+1597,1st Half - Player Sent Off?
+1598,Number of bookings home
+1599,1st Half - Number of Bookings Home
+1600,Number of bookings away
+1601,1st Half - Number of Bookings Away
+1602,First Team Booked
+1603,1st Half - First Team Booked
+1604,Match bookings
+1605,1st Half - Match Bookings
+1606,Aggregated booking points
+1607,1st Half - Aggregated Booking Points
+1608,Exact bookings
+1609,1st Half - Exact Bookings
+1610,Home Team Player Sent Off
+1611,1st Half - Home Team Player Sent Off
+1612,Away Team Player Sent Off
+1613,1st Half - Away team Player Sent Off
+1614,Total Goals (exact)
+1615,2nd Half - 1X2
+1616,2nd Half - 1X2
+1617,2nd half - 3way
+1618,2nd Half - Asian Total
+1619,2nd Half - Asian Handicap
+1620,2nd Half - Points Spread
+1621,Halftime/Fulltime Correct Score
+1622,Overtime + goal Yes/No
+1623,Penalty shoot out Yes/No
+1624,How will the match be decided?
+1625,Clean sheet home team
+1626,Clean sheet away team
+1627,Which team to score
+1628,1st Half - Total Goals
+1629,2nd Half - Total Goals
+1630,Total corners
+1631,1st Half - Total Corners
+1632,Corner handicap
+1633,1st Half - Corner Handicap
+1634,Corner matchbet
+1635,1st Half - Corner Matchbet
+1636,Corner Odd/Even
+1637,1st Half - Corner Odd/Even
+1638,First corner
+1639,1st Half - First Corner
+1640,Home Team Number of Corners
+1641,1st Half - Home Team Number of Corners
+1642,1st Half - Totals
+1643,2nd Half - Total Spread
+1644,2nd Half - Totals
+1645,Last corner
+1646,1st Half - Last Corner
+1647,Away Team Number of Corners
+1648,1st Half - Away Team Number of Corners
+1649,Last team to score
+1650,Last team to Score
+1651,2nd Period - 3way
+1652,Corner Total (Aggregated)
+1653,1st Half - Corner Total (Aggregated)
+1654,1st Period - Odd/Even goals
+1655,2nd Period - Odd/Even goals
+1656,3rd Period - Odd/Even goals
+1657,1st Period - Draw no bet
+1658,2nd Period - Draw no bet
+1659,3rd Period - Draw no bet
+1660,2nd Period - Both teams to score
+1661,3rd Period - Both teams to score
+1662,1st Period - Goal Spreads
+1663,2nd Period - Goal Spreads
+1664,3rd Period - Goal Spreads
+1665,1st Period - First team to score
+1666,2nd Period - First team to score
+1667,3rd Period - First team to score
+1668,1st Period - Last team to score
+1669,2nd Period - Last team to score
+1670,3rd Period - Last team to score
+1671,2nd Half - Points Spread (incl. Overtime)
+1672,2nd Half - Total Spreads (incl. Overtime)
+1673,1st Period - Both teams to score
+1674,Home to win both halves?
+1675,Home to win either half?
+1676,Home to score in both halves?
+1677,Away to win both halves?
+1678,Away to win either half?
+1679,Away to score in both halves?
+1680,Both halves over 1.5?
+1681,Both halves under 1.5?
+1682,1st Half - Double Chance
+1683,1st Half Double Chance
+1684,1st Half - Draw no bet
+1685,1st half - Draw no bet
+1686,1st Half Draw no Bet
+1687,First goal interval 10 min
+1688,First goal interval 15 min
+1689,First 10 minutes -3 way
+1690,1st Half - Both Teams to Score
+1691,2nd Half - Both score
+1692,Highest Scoring Half Hometeam
+1693,Highest Scoring Half Awayteam
+1694,CorrectScore
+1695,1st Half - Odd / Even
+1696,2nd Half - Odd / Even
+1697,2nd Half - Odd / Even
+1698,2nd Half - Odd/Even Points
+1699,2nd half - Draw no bet
+1700,2nd Half - Draw no bet
+1701,2nd half - Draw no bet
+1702,2nd half - Double Chance
+1703,2nd half - Double Chance
+1704,Correct Set Score
+1705,How many sets will exceed score limit?
+1706,How many sets will exceed score limit?
+1707,1st Set – Leg Handicap
+1708,1st Set Handicap
+1709,1st Set Handicap
+1710,1st Set – Leg Total
+1711,1st Set Total
+1712,1st Set Total
+1713,1st Set Race to X
+1714,1st Set Race to X
+1715,1st Set Odd/even
+1716,1st Set Odd/even
+1717,Who wins third set
+1718,Who wins third set
+1719,Who wins fourth set
+1720,Who wins fifth set
+1721,5th Set Played?
+1722,Total margins NBA-ranges
+1723,Total margins Regular-ranges
+1724,Correct Set Score
+1725,4th Set Played?
+1726,Totals Away BB
+1727,Visiting Team
+1728,Totals Away
+1729,Totals Away
+1730,Totals away team
+1731,Totals Away Team (excl. superovers)
+1732,Totals Away
+1733,Totals Home BB
+1734,Home Team
+1735,Totals Home
+1736,Totals Home
+1737,Totals home team
+1738,Totals Home Team (excl. superovers)
+1739,Totals Home
+1740,1st Quarter 1X2
+1741,2nd Quarter - 1X2
+1742,3rd Quarter - 1X2
+1743,4th Quarter - 1X2
+1744,1st Quarter - Draw no bet
+1745,2nd Quarter - Draw no bet
+1746,3rd Quarter - Draw no bet
+1747,4th Quarter - Draw no bet
+1748,1st Quarter - Total Spread
+1749,2nd Quarter - Total Spread
+1750,3rd Quarter - Total Spread
+1751,4th Quarter - Total Spread
+1752,1st Quarter - Points Spread
+1753,2nd Quarter - Points Spread
+1754,3rd Quarter - Points Spread
+1755,4th Quarter - Points Spread
+1756,1st Quarter - Odd/Even Points
+1757,2nd Quarter - Odd/Even Points
+1758,3rd Quarter - Odd/Even Points
+1759,4th Quarter - Odd/Even Points
+1760,First to x points
+1761,Total AAMS
+1762,Total 3way
+1763,Totals (incl. OT)
+1764,2way (incl. OT)
+1765,Winning Margins Rugby Union
+1766,Winning Margins Rugby League
+1767,Matchbet + Both Teams to Score
+1768,To Qualify
+1769,Correct Score (incl other) 2
+1770,Last goalscorer
+1771,1st Half - First team to score
+1772,1st Half - Correct Score 2
+1773,1st Half - Totals Home
+1774,1st Half - Totals Away
+1775,1st Half - Clean Sheet Home Team
+1776,1st Half - Clean Sheet Away Team
+1777,1st Half - European Handicap
+1778,2nd Half - Totals Home
+1779,2nd Half - Totals Away
+1780,2nd Half - Clean Sheet Home Team
+1781,2nd Half - Clean Sheet Away Team
+1782,2nd Half - Correct Score
+1783,2nd Half - Correct Score 2
+1784,2nd Half - First Team to score
+1785,2nd Half - European Handicap
+1786,Home No Bet
+1787,Away No Bet
+1788,Home Win To Nil
+1789,Away Win To Nil
+1790,Odd / Even Home Team
+1791,Odd / Even Away Team
+1792,First Half - Matchbet + Totals
+1793,First Half - Matchbet + Both Teams To Score
+1794,Both Score + Totals
+1795,Expected Total and Supremacy
+1796,Correct Frame Score (best of 7 frames)
+1797,Correct Frame Score (best of 9 frames)
+1798,Correct Frame Score (best of 11 frames)
+1799,3way (after 10 overs)
+1800,runs hometeam (after 10 overs)
+1801,runs awayteam (after 10 overs)
+1802,multiple runs hometeam (after 10 overs)
+1803,multiple runs awayteam (after 10 overs)
+1804,3way (after 6 overs)
+1805,runs hometeam (after 6 overs)
+1806,runs awayteam (after 6 overs)
+1807,multiple runs hometeam (after 6 overs)
+1808,multiple runs awayteam (after 6 overs)
+1809,Total ranges Home Team (excl. superovers)
+1810,Total ranges Away Team (excl. superovers)
+1811,How many runs highest scoring over
+1812,Which team highest scoring overs
+1813,1st Leg – Winner
+1814,First player to score a 180
+1815,Most 180s
+1816,Handicap 180s
+1817,Total 180s
+1818,180s - Player 1
+1819,180s - Player 2
+1820,Set Handicap
+1821,Correct Set Score (BO7)
+1822,Correct Set Score (BO9)
+1823,Correct Set Score (BO11)
+1824,Correct Set Score (BO13)
+1825,Correct Set Score (BO15)
+1826,1st Set – Correct Leg Score (BO5)
+1827,1st Set – Correct Leg Score (BO11)
+1828,1st Set – Correct Leg Score (BO12)
+1829,1st Set – Correct Leg Score (BO17)
+1830,1st Set – Correct Leg Score (BO19)
+1831,1st Set – Correct Leg Score (BO21)
+1832,Handicap
+1833,Correct score
+1834,3 Way
+1835,2 Way
+1836,Totals
+1837,Handicap
+1838,Correct score
+1839,3 Way
+1840,2 Way
+1841,Totals
+1842,1st Set – Correct Score
+1843,1st Set – Tiebreak Played?
+1844,1st Set Player 1
+1845,1st Set Player 2
+1846,1st Set Winner 3 way
+1847,Any Set To Nil
+1848,Double Result
+1849,Player 1 to win a set
+1850,Player 2 to win a set
+1851,Set Handicap
+1852,Tiebreak Played?
+1853,US Spread
+1854,US Spread
+1855,US Spread
+1856,US Spread
+1857,US Total
+1858,US Total
+1859,US Total
+1860,US Total
+1861,Winner
+1862,2 Way
+1863,Total Games – Player 2
+1864,Game Handicap
+1865,1st Set – Total
+1866,1st Set – Game Handicap
+1867,Total Games - Player 1
+1868,Odd / Even Number Of Games
+1869,3 Way
+1870,Set Handicap
+1871,1st Set – Total
+1872,1st Set Handicap
+1873,1st Period - Draw no bet
+1874,Total number of sets (best of 3)
+1875,Correct score
+1876,2 Way
+1877,Correct Score AAMS
+1878,1st Set Handicap
+1879,1st Set Odd/even
+1880,1st Set Total
+1881,Asian Handicap
+1882,Correct Set Score (best of 3)
+1883,Correct Set Score (best of 5)
+1884,How many sets will exceed score limit (best of 3)
+1885,Total
+1886,Total number of sets (best of 3)
+1887,Total number of sets (best of 5)
+1888,Who wins fifth set
+1889,Who wins first set
+1890,Who wins fourth set
+1891,Who wins second set
+1892,Who wins third set
+1893,Total Goals AAMS
+1894,Both Teams To Score 1st Half / 2nd Half
+1895,Asian Handicap Main Line
+1896,2nd Half - Matchbet and Total
+1897,2nd Half - Matchbet and Both Teams Score
+1898,Double Chance and Total
+1899,Double Chance and Both Teams Score
+1900,1st Half - Double Chance and Both Teams Score
+1901,2nd Half - Double Chance and Both Teams Score
+1902,Multiscores
+1903,Multigoals
+1904,1st Half - Multigoals
+1905,2nd Half - Multigoals
+1906,Multigoals Hometeam
+1907,Multigoals Awayteam
+1908,Double Chance (match) and 1st Half Both Teams Score
+1909,Double Chance (match) and 2nd Half Both Teams Score
+1910,3way AAMS
+1911,Handicap BB
+1912,Goal Spread Main Line
+1914,Goal Spread Main Line
+1916,Double Chance
+1917,Draw no bet
+1918,Asian Total
+1919,1st Half - Asian Total
+1920,European Handicap
+1921,Matchbet + Totals
+1922,1st Half Double Chance
+1923,1st Half Draw no Bet
+1924,Totals Away
+1925,Totals Home
+1926,1st Half - Totals Home Team
+1927,1st Half - Totals Away Team
+1928,1st Half - European Handicap
+1929,Total Margins
+1930,Half time Winning Margins Rugby Union
+1931,Matchbet tries
+1932,Handicap tries
+1933,Asian Handicap tries
+1934,Draw no bet tries
+1935,Double Chance tries
+1936,Total tries
+1937,Total tries Home Team
+1938,Total tries Away Team
+1939,Odd/Even tries
+1940,1st Half Matchbet tries
+1941,1st Half Handicap tries
+1942,1st Half Asian Handicap tries
+1943,1st Half Draw no bet tries
+1944,1st Half Double Chance tries
+1945,1st Half Total tries
+1946,1st Half Total tries Home Team
+1947,1st Half Total tries Away Team
+1948,1st Half Odd/Even tries
+1949,First Scoring play
+1950,Half time Total Margins
+1951,Points Spread Main Line
+1952,Asian Handicap
+1953,Who wins first set
+1954,Total number of sets (best of 3)
+1955,Total
+1956,Who wins second set
+1957,Total number of sets (best of 5)
+1958,Correct Set Score (best of 3)
+1959,Correct Set Score (best of 5)
+1960,1st Set Handicap
+1961,1st Set Total
+1962,1st Set Odd/even
+1963,Who wins third set
+1964,Who wins fourth set
+1965,Who wins fifth set
+1966,How many sets will exceed score limit (best of 3)
+1967,How many sets will exceed score limit (best of 5)
+1968,Asian Handicap
+1969,Asian Total
+1970,Who Wins the First Map
+1971,3way
+1972,Who Wins the Second Map
+1973,Final result (in maps - best of 3)
+1974,Final Result (in maps - best of 5)
+1975,1st Map - Asian Handicap Rounds
+1976,1st Map - Total Rounds
+1977,Who Wins the Third Map
+1978,1st Map - 3way
+1979,First blood
+1980,Knife round
+1981,First Pistol round
+1982,Final Result (in maps - best of 2)
+1983,Second Pistol round
+1984,1st Map - Will there be overtime?
+1985,Asian Handicap
+1986,Asian Total
+1987,1st map winner
+1988,3way
+1989,2nd map winner
+1990,Final Result (in maps - best of 3)
+1991,Final Result (in maps - best of 5)
+1992,3rd map winner
+1993,1st Map – 1st Blood
+1994,Final Result (in maps - best of 2)
+1995,1st Map – 1st Tower
+1996,1st Map – 1st Dragon
+1997,1st Map – 1st Baron
+1998,1st Map – 1st Inhibitor
+1999,3 Way
+2005,Which Team Will Win The Final
+2006,Home Or Both Teams To Score
+2007,Draw Or Both Teams To Score
+2008,Away Or Both Teams To Score
+2009,"Handicap "
+2010,1st Quarter - Total Spread
+2011,2nd Quarter - Total Spread
+2012,3rd Quarter - Total Spread
+2013,4th Quarter - Total Spread
+2014,Total Set
+2015,Total Touchdowns (incl. Overtime)
+2016,Total Field Goals (incl OT)
+2017,Anytime Goalscorer and Correct Score
+2018,Anytime Goalscorer and 3 way
+2019,1st Goalscorer and 3 way
+2020,1st Half Result Or Match Result
+2025,Custom Bet

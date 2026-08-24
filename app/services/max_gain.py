@@ -42,7 +42,15 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal, localcontext
 
-from app.services.markets import FULL_MASK, GOALS_GROUP, UnknownOutcome, describe_atom, mask_for
+from app.services.markets import (
+    MAX_SCORE_BOUND,
+    UnknownOutcome,
+    describe_atom,
+    get_space,
+    joint_fits,
+    mask_for,
+    required_bound,
+)
 from app.services.odd_types import resolve_odd_type
 
 __all__ = [
@@ -83,6 +91,8 @@ class SelectionInput:
     odd_type_id: int
     outcome: str
     odds: Decimal
+    is_live: int = 0  # pre-match: 0, live: 1 -- oddTypeId'nin hangi katalogda aranacağı
+    special_bet_value: str | None = None  # eşik/handikap, ör. "2.5" veya "0:1"
 
 
 @dataclass(frozen=True)
@@ -106,8 +116,10 @@ class CouponInput:
 class WinningSelection:
     odd_type_id: int
     odd_type_name: str
+    is_live: int
     outcome: str
     odds: Decimal
+    special_bet_value: str | None = None
 
 
 @dataclass(frozen=True)
@@ -194,7 +206,7 @@ def _product(values: list[Decimal]) -> Decimal:
 
 
 def _best_compatible_subset(
-    items: list[tuple[Decimal, int]],
+    items: list[tuple[Decimal, int]], full_mask: int
 ) -> tuple[Decimal, tuple[int, ...], int]:
     """Kesişimi boş olmayan, oran toplamı en yüksek alt kümeyi bulur.
 
@@ -229,7 +241,7 @@ def _best_compatible_subset(
             dfs(pos + 1, narrowed, total + odds, (*chosen, index))
         dfs(pos + 1, intersection, total, chosen)
 
-    dfs(0, FULL_MASK, Decimal(0), ())
+    dfs(0, full_mask, Decimal(0), ())
     return best_total, tuple(sorted(best_chosen)), best_mask
 
 
@@ -238,74 +250,151 @@ def _best_compatible_subset(
 # --------------------------------------------------------------------------- #
 
 
+def _quantize_bound(bound: int) -> int:
+    """Skor tavanını basamaklara oturtur; aynı uzay tekrar tekrar kurulmasın."""
+    step = 4 if bound <= 32 else 16
+    return min(MAX_SCORE_BOUND, ((bound + step - 1) // step) * step)
+
+
+@dataclass(frozen=True)
+class _Resolved:
+    """Anlamı çözümlenmiş tek bir seçim."""
+
+    selection: SelectionInput
+    market_id: str
+    period: str
+    bound: int
+
+
+def _plan_space(periods: set[str], bound: int) -> tuple[str, bool]:
+    """(uzay türü, bölme gerekli mi) döner.
+
+    Tek periyotluk gruplar iki boyutlu uzayda çözülür ve büyük tavanlara
+    (basketbol, kriket) izin verir. Birden fazla periyot karışıyorsa dört
+    boyutlu ortak uzay gerekir; o da atom sınırına sığmıyorsa grup periyotlara
+    bölünür.
+    """
+    if periods <= {"FT"} or periods <= {"2H"}:
+        return "FLAT", False
+    if periods <= {"HT"}:
+        return "HALF", False
+    return ("JOINT", False) if joint_fits(bound) else ("JOINT", True)
+
+
+def _solve_group(
+    entries: list[tuple[SelectionInput, int]], space_key: tuple[str, int]
+) -> tuple[Decimal, list[SelectionInput], dict[str, str] | None]:
+    """Bir kısıt grubundaki en iyi uyumlu alt kümeyi çözer."""
+    space = get_space(*space_key)
+    items = [(selection.odds, mask) for selection, mask in entries]
+    total, chosen, final_mask = _best_compatible_subset(items, space.full_mask)
+    winners = [entries[index][0] for index in chosen]
+    scoreline = describe_atom(space, (final_mask & -final_mask).bit_length() - 1)
+    return total, winners, scoreline
+
+
 def _resolve_match(
     match_id: str, selections: list[SelectionInput], banker: bool, warnings: list[str]
 ) -> MatchResolution:
     """Bir maçtaki seçimleri kısıt gruplarına ayırıp ağırlığını hesaplar."""
-    grouped: OrderedDict[str, list[tuple[SelectionInput, int | None]]] = OrderedDict()
+    resolved: list[_Resolved] = []
+    isolated: OrderedDict[str, list[SelectionInput]] = OrderedDict()
+
+    def isolate(selection: SelectionInput, reason: str) -> None:
+        key = f"UNMAPPED:{selection.is_live}:{selection.odd_type_id}"
+        isolated.setdefault(key, []).append(selection)
+        warnings.append(f"Maç {match_id}: {reason}")
 
     for selection in selections:
-        info = resolve_odd_type(selection.odd_type_id)
-        group = info.group
-        mask: int | None = None
+        info = resolve_odd_type(selection.odd_type_id, selection.is_live)
+        source = "live" if selection.is_live else "pre"
 
-        if info.market is not None:
-            try:
-                mask = mask_for(info.market.id, selection.outcome)
-            except UnknownOutcome as exc:
-                group = f"UNPARSED:{selection.odd_type_id}"
-                warnings.append(f"Maç {match_id}: {exc} Seçim yalıtılmış olarak değerlendirildi.")
-            else:
-                if mask == 0:
-                    group = f"UNPARSED:{selection.odd_type_id}"
-                    mask = None
-                    warnings.append(
-                        f"Maç {match_id}: oddType {selection.odd_type_id} / "
-                        f"{selection.outcome!r} hiçbir sonuçla eşleşmiyor; "
-                        "yalıtılmış olarak değerlendirildi."
-                    )
-        else:
-            warnings.append(
-                f"Maç {match_id}: oddType {selection.odd_type_id} katalogda yok; "
-                "aynı id'nin seçimleri dışlayıcı, farklı id'ler bağımsız sayıldı."
+        if info.market is None:
+            reason = "anlamı eşlenmemiş" if info.in_catalog else f"{source} katalogunda yok"
+            isolate(
+                selection,
+                f"oddType {selection.odd_type_id} ({source}) {reason}; aynı id'nin "
+                "seçimleri dışlayıcı, farklı id'ler bağımsız sayıldı.",
             )
+            continue
 
-        grouped.setdefault(group, []).append((selection, mask))
+        try:
+            bound = required_bound(info.market.id, selection.outcome, selection.special_bet_value)
+        except UnknownOutcome as exc:
+            isolate(selection, f"{exc} Seçim yalıtılmış olarak değerlendirildi.")
+            continue
+
+        resolved.append(
+            _Resolved(
+                selection=selection,
+                market_id=info.market.id,
+                period=info.market.period,
+                bound=bound,
+            )
+        )
+
+    groups: OrderedDict[str, list[tuple[SelectionInput, int]]] = OrderedDict()
+    space_keys: dict[str, tuple[str, int]] = {}
+
+    if resolved:
+        bound = _quantize_bound(max(item.bound for item in resolved))
+        periods = {item.period for item in resolved}
+        kind, must_split = _plan_space(periods, bound)
+
+        if must_split:
+            warnings.append(
+                f"Maç {match_id}: skor tavanı {bound} ile ilk yarı ve maç sonu birlikte "
+                "modellenemeyecek kadar büyük; periyotlar ayrı ayrı değerlendirildi "
+                "(periyotlar arası çelişkiler tespit edilemez)."
+            )
+            buckets: OrderedDict[str, list[_Resolved]] = OrderedDict()
+            for item in resolved:
+                buckets.setdefault(item.period, []).append(item)
+        else:
+            buckets = OrderedDict({"": resolved})
+
+        for period, items in buckets.items():
+            group_bound = _quantize_bound(max(item.bound for item in items))
+            group_kind = kind if not must_split else ("HALF" if period == "HT" else "FLAT")
+            space_key = (group_kind, group_bound)
+            name = "SCORE" if not period else f"SCORE:{period}"
+
+            for item in items:
+                try:
+                    mask = mask_for(
+                        item.market_id,
+                        item.selection.outcome,
+                        item.selection.special_bet_value,
+                        space_key,
+                    )
+                except UnknownOutcome as exc:
+                    isolate(item.selection, f"{exc} Seçim yalıtılmış olarak değerlendirildi.")
+                    continue
+                if mask:
+                    groups.setdefault(name, []).append((item.selection, mask))
+                    space_keys[name] = space_key
+                else:
+                    isolate(
+                        item.selection,
+                        f"oddType {item.selection.odd_type_id} / "
+                        f"{item.selection.outcome!r} (specialBetValue="
+                        f"{item.selection.special_bet_value!r}) modellenen sonuç uzayında "
+                        "hiçbir senaryoyla eşleşmiyor; yalıtılmış olarak değerlendirildi.",
+                    )
 
     resolutions: list[GroupResolution] = []
     weight = Decimal(0)
 
-    for group, entries in grouped.items():
-        if group == GOALS_GROUP:
-            items = [(sel.odds, mask) for sel, mask in entries if mask is not None]
-            total, chosen, final_mask = _best_compatible_subset(items)
-            winners = [entries[i][0] for i in chosen]
-            scoreline = describe_atom((final_mask & -final_mask).bit_length() - 1)
-        else:
-            # Yalıtılmış grup: seçimler birbirini dışlar, en yükseği alınır.
-            best = max(entries, key=lambda entry: entry[0].odds)
-            total = best[0].odds
-            winners = [best[0]]
-            scoreline = None
-
+    for name, entries in groups.items():
+        total, winners, scoreline = _solve_group(entries, space_keys[name])
         weight += total
-        resolutions.append(
-            GroupResolution(
-                group=group,
-                odds_sum=total,
-                combined=len(winners) > 1,
-                winning_selections=tuple(
-                    WinningSelection(
-                        odd_type_id=w.odd_type_id,
-                        odd_type_name=resolve_odd_type(w.odd_type_id).name,
-                        outcome=w.outcome,
-                        odds=w.odds,
-                    )
-                    for w in winners
-                ),
-                scoreline=scoreline,
-            )
-        )
+        resolutions.append(_group_out(name, total, winners, scoreline))
+
+    for name, entries in isolated.items():
+        # Yalıtılmış grup: aynı oddType'ın seçimleri birbirini dışlar.
+        best = max(entries, key=lambda selection: selection.odds)
+        weight += best.odds
+        resolutions.append(_group_out(name, best.odds, [best], None))
 
     return MatchResolution(
         match_id=match_id,
@@ -313,6 +402,31 @@ def _resolve_match(
         selection_count=len(selections),
         weight=weight,
         groups=tuple(resolutions),
+    )
+
+
+def _group_out(
+    group: str,
+    total: Decimal,
+    winners: list[SelectionInput],
+    scoreline: dict[str, str] | None,
+) -> GroupResolution:
+    return GroupResolution(
+        group=group,
+        odds_sum=total,
+        combined=len(winners) > 1,
+        winning_selections=tuple(
+            WinningSelection(
+                odd_type_id=w.odd_type_id,
+                odd_type_name=resolve_odd_type(w.odd_type_id, w.is_live).name,
+                is_live=w.is_live,
+                outcome=w.outcome,
+                odds=w.odds,
+                special_bet_value=w.special_bet_value,
+            )
+            for w in winners
+        ),
+        scoreline=scoreline,
     )
 
 
@@ -332,7 +446,7 @@ def _validate(coupon: CouponInput) -> OrderedDict[str, list[SelectionInput]]:
         raise CouponError("stake_mode yalnızca 'total' veya 'per_line' olabilir.")
 
     by_match: OrderedDict[str, list[SelectionInput]] = OrderedDict()
-    seen: set[tuple[str, int, str]] = set()
+    seen: set[tuple[str, int, int, str, str]] = set()
 
     for selection in coupon.selections:
         if selection.odds <= 1:
@@ -341,7 +455,13 @@ def _validate(coupon: CouponInput) -> OrderedDict[str, list[SelectionInput]]:
                 f"1.00'den büyük olmalıdır (gelen: {selection.odds})."
             )
 
-        key = (selection.match_id, selection.odd_type_id, selection.outcome.strip().upper())
+        key = (
+            selection.match_id,
+            selection.is_live,
+            selection.odd_type_id,
+            selection.outcome.strip().upper(),
+            (selection.special_bet_value or "").strip().upper(),
+        )
         if key in seen:
             raise CouponError(
                 f"Aynı seçim iki kez gönderildi: maç {selection.match_id}, "
