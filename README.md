@@ -69,9 +69,9 @@ en iyiyi geçemiyorsa dal kesilir. Yanıt, seçilen alt kümeyi **ve onu gerçek
 
 ```python
 ODD_TYPE_MARKET: dict[int, str] = {
-    1: "MS_1X2",      # Maç Sonucu (1X2)
-    2: "CIFT_SANS",   # Çift Şans
-    3: "ALT_UST",     # <- yeni id böyle eklenir
+    1: "MS_1X2",  # Maç Sonucu (1X2)
+    2: "CIFT_SANS",  # Çift Şans
+    3: "ALT_UST",  # <- yeni id böyle eklenir
 }
 ```
 
