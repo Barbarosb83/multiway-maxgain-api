@@ -70,7 +70,7 @@ Gerçek kupon gövdesindeki alanların karşılıkları:
 | `OutCome` | `outcome` | `oddId` yoksa kullanılır; çok dilli tanınır |
 | `SpecialBetValue` | `specialBetValue` | Boş string (`""`) yokluk sayılır |
 | *(skor)* | `currentScore` | Gövdede yok; canlı maçlarda ayrıca gönderilmeli |
-| `OddValue1` | `odds` | Tam sayı gelebilir; en az iki ondalığa tamamlanır |
+| `OddValue1` | `odds` | **Güncel** oran. Tam sayı gelebilir, en az iki ondalığa tamamlanır; dört ondalık (`1.6667`) korunur |
 | `Banko` | `bankerMatchIds` | `true` olan maçların kimlikleri |
 
 Kupon tutarı gövdede yer almaz; `couponAmount` olarak ayrıca gönderilir.
@@ -432,7 +432,7 @@ Beş satırın üçü en iyi senaryoda birlikte kazanır:
 | `selections[].oddTypeId` | int | ◐ | `oddId` yoksa zorunlu |
 | `selections[].outcome` | string | ◐ | `oddId` yoksa zorunlu |
 | `selections[].specialBetValue` | string | — | Gerektiren piyasalarda zorunlu (`needsSpecialBetValue`) |
-| `selections[].odds` | decimal | ✅ | `> 1.00` |
+| `selections[].odds` | decimal | ✅ | `> 1.00`. Seçimin **güncel** oranı; servis oran geçmişi tutmaz |
 | `couponAmount` | decimal | ✅ | `> 0` |
 | `stakeMode` | `total` \| `per_line` | — | Varsayılan `total` |
 | `system.sizes[]` | int dizisi | — | Verilmezse tam kombine varsayılır |
