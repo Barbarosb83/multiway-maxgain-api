@@ -51,6 +51,7 @@ __all__ = [
     "catalog_size",
     "ODD_TYPE_MARKET",
     "REJECTED_MAPPINGS",
+    "sample_special_bet_value",
 ]
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
@@ -80,6 +81,7 @@ _NAME_TO_MARKET: dict[str, str] = {
     "3 way": "MS_1X2",
     "1x2": "MS_1X2",
     "winner": "MS_1X2",
+    "rest of match": "REST_1X2",
     "3way aams": "MS_1X2",
     "total 3way": "ALT_UST_3WAY",
     "double chance": "CIFT_SANS",
@@ -318,11 +320,19 @@ ODD_TYPE_NAME = _load_names()
 OUTCOME_BY_ODD_ID, OUTCOMES_BY_ODD_TYPE = _load_outcomes()
 
 
-def _sample_special(market: MarketDef) -> str | None:
-    """Doğrulama için temsilî specialBetValue."""
+def sample_special_bet_value(market: MarketDef) -> str | None:
+    """Doğrulama için temsilî specialBetValue.
+
+    Piyasa ailesine göre değişir: handikap bir skor farkı, canlı "maçın kalanı"
+    piyasaları anlık skor, alt/üst ise sayısal bir eşik bekler.
+    """
     if not market.needs_special:
         return None
-    return "0:1" if "HANDIKAP" in market.id else "2.5"
+    if "HANDIKAP" in market.id:
+        return "0:1"
+    if "REST" in market.id:
+        return "0:0"
+    return "2.5"
 
 
 def _build_market_map() -> tuple[dict[tuple[int, int], str], list[tuple[int, int, str, str]]]:
@@ -342,7 +352,7 @@ def _build_market_map() -> tuple[dict[tuple[int, int], str], list[tuple[int, int
             continue
 
         market = MARKETS[market_id]
-        special = _sample_special(market)
+        special = sample_special_bet_value(market)
         problem = ""
         for outcome in OUTCOMES_BY_ODD_TYPE.get(key, []):
             if is_aggregate(outcome) or outcome.strip() in market.stray_outcomes:

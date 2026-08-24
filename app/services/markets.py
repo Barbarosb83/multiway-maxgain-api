@@ -354,6 +354,49 @@ _AFFIRMATIVE = {"VAR", "YES", "Y", "EVET", "E", "KGVAR", "GOAL", "J", "JA", "SI"
 _NEGATIVE = {"YOK", "NO", "HAYIR", "H", "KGYOK", "NOGOAL", "N", "NEIN", "NON", "2"}
 
 
+def _current_score(special: str | None) -> tuple[int, int]:
+    """``"0:0"`` -> (0, 0). Canlı piyasalarda bahis anındaki skor."""
+    match = _SCORE_RE.match(_norm(special))
+    if not match:
+        raise UnknownOutcome(
+            f"Anlık skor çözümlenemedi: specialBetValue={special!r} ('0:0' bekleniyor)"
+        )
+    return int(match.group(1)), int(match.group(2))
+
+
+def _rest_result() -> tuple[Builder, Bounder]:
+    """Maçın kalanını kim kazanır.
+
+    Canlı piyasalarda bahis, o anki skordan sonrasına yatırılır: kazanan taraf
+    *kalan sürede* daha çok gol atandır. ``specialBetValue`` bahis anındaki
+    skoru taşır; yüklem maç sonu skorundan bu skoru düşerek çalışır ve maç
+    sonunun anlık skordan küçük olamayacağını da kısıt olarak ekler.
+
+    Anlık skor ``0:0`` olduğunda piyasa maç sonucuyla aynıya indirgenir.
+    """
+
+    def build(outcome: str, special: str | None) -> Predicate:
+        current_home, current_away = _current_score(special)
+        code = _norm(outcome)
+        if code not in ("1", "X", "2"):
+            raise UnknownOutcome(f"Kalan maç outcome'u geçersiz: {outcome!r} (1, X, 2)")
+        inner = _result_predicate(code)
+
+        def predicate(scores: Scores) -> bool:
+            home, away = scores[0]
+            if home < current_home or away < current_away:
+                return False  # maç sonu, anlık skorun altına inemez
+            return inner((home - current_home, away - current_away))
+
+        return predicate
+
+    def bound(_outcome: str, special: str | None) -> int:
+        current_home, current_away = _current_score(special)
+        return max(current_home, current_away) + MIN_SCORE_BOUND
+
+    return build, bound
+
+
 def _btts_predicate(code: str) -> Callable[[tuple[int, int]], bool]:
     if code in _AFFIRMATIVE:
         return lambda p: p[0] > 0 and p[1] > 0
@@ -626,6 +669,14 @@ def _build_registry() -> dict[str, MarketDef]:
         _correct_score,
         ("1-0",),
         bounder=_correct_score_bound,
+    )
+    markets["REST_1X2"] = _market(
+        "REST_1X2",
+        "Maçın Kalanı",
+        "FT",
+        _rest_result(),
+        ("1", "X", "2"),
+        needs_special=True,
     )
     markets["IY_MS"] = _market(
         "IY_MS",

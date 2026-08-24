@@ -16,7 +16,7 @@ Kupon, düz bir **seçim listesi**dir. Her seçim şunları taşır:
 | `matchId` | Maç kimliği. Aynı maça **birden fazla** seçim gelebilir — "multiway". |
 | `isLive` | Event pre-match ise `0`, live ise `1`. Kimlikler bu bayrağa göre ilgili katalogda aranır. |
 | `oddId` | **Seçimin tekil kimliği.** Verildiğinde `oddTypeId` ve `outcome` katalogdan doldurulur. |
-| `specialBetValue` | Piyasanın eşiği. Alt/Üst için `"2.5"`, handikap için `"0:1"` ya da `"-1.5"`. Gerektiren piyasalarda zorunlu. |
+| `specialBetValue` | Piyasaya göre değişir: Alt/Üst'te eşik (`"2.5"`), handikapta fark (`"0:1"`, `"-1.5"`), canlı "maçın kalanı"nda **bahis anındaki skor** (`"0:0"`). Gerektiren piyasalarda zorunlu. |
 | `odds` | Ondalık oran (`> 1.00`) |
 | `oddTypeId`, `outcome` | `oddId` yoksa zorunlu; varsa yok sayılır (tutarsızlık uyarı olarak bildirilir). |
 
@@ -57,6 +57,22 @@ böylece çok dilli çözümlemenin katalogla tutarlı kaldığı garanti altın
 Kupon düzeyinde: `couponAmount`, isteğe bağlı `system`, `bankerMatchIds`, `bonusMultiplier`,
 `maxPayoutCap`, `currency`.
 
+### Sağlayıcı gövdesinden eşleme
+
+Gerçek kupon gövdesindeki alanların karşılıkları:
+
+| Gövde alanı | API alanı | Not |
+|---|---|---|
+| `MatchId` | `matchId` | Canlı maçlarda **negatif** olabilir |
+| `BetType` | `isLive` | `0` = pre-match, `1` = canlı |
+| `OddsTypeId` | `oddTypeId` | `isLive`'a göre ilgili katalogda aranır |
+| `OutCome` | `outcome` | `oddId` yoksa kullanılır; çok dilli tanınır |
+| `SpecialBetValue` | `specialBetValue` | Boş string (`""`) yokluk sayılır |
+| `OddValue1` | `odds` | Tam sayı gelebilir; en az iki ondalığa tamamlanır |
+| `Banko` | `bankerMatchIds` | `true` olan maçların kimlikleri |
+
+Kupon tutarı gövdede yer almaz; `couponAmount` olarak ayrıca gönderilir.
+
 ### İki ayrı id uzayı
 
 Pre-match ve live katalogları **bağımsız numaralandırılmıştır** ve örtüşür. Aynı sayı iki
@@ -84,6 +100,7 @@ olması **değil**, aynı anda gerçekleşebilir olmalarıdır:
 | `Alt 0.5` + `Üst 2.5` | ✗ toplam hem 0 hem 3+ olamaz | **max** |
 | `Üst 0.5` + `Üst 2.5` | ✓ toplam 3+ ise ikisi de tutar | **toplam** |
 | `1X2 "2"` + `Alt 0.5` | ✗ deplasman kazanırsa en az 1 gol var | **max** |
+| `Kalan "1"` (1:0'dan) + `1X2 "2"` | ✗ ev kalanı da alırsa deplasman kazanamaz | **max** |
 | `"Over and home"` + `1X2 "2"` | ✗ kombine piyasa ev galibiyeti şart koşuyor | **max** |
 | `Ç1 Handikap 0:25` + `Ç1 Alt 20.5` | ✗ 26+ fark ile 20'den az toplam olmaz | **max** |
 
@@ -208,6 +225,15 @@ piyasasıdır; ikisi de eşlenmiştir.
 
 > Asya handikabında `0` ve çeyrek çizgilerde iade/yarım kazanç vardır; burada kazanır/kazanmaz
 > olarak ele alınır. Bu, max gain'i düşürebilir ama asla şişirmez.
+
+**Canlı "maçın kalanı"** (`live 3`) bahsi o anki skordan sonrasına yatırılır: kazanan taraf kalan
+sürede daha çok gol atandır. `specialBetValue` bahis anındaki skoru taşır ve maç sonu skorundan
+düşülür; maç sonunun anlık skorun altına inemeyeceği de kısıt olarak eklenir. Anlık skor `0:0`
+olduğunda piyasa maç sonucuyla aynıya indirgenir.
+
+**Gol sırasına bağlı piyasalar** (`live 11`, "Next goal") bilerek eşlenmemiştir: hangi takımın
+*sıradaki* golü attığı maç sonu skorundan çıkarılamaz. Yalıtılmış kalırlar, yani sonuçtan bağımsız
+sayılıp toplanırlar — pratikte doğru olan da budur.
 
 ### Eşlenmemiş id'ler reddedilmez
 

@@ -14,6 +14,7 @@ from app.services.odd_types import (
     REJECTED_MAPPINGS,
     resolve_odd_type,
     resolve_outcome,
+    sample_special_bet_value,
 )
 
 
@@ -51,7 +52,7 @@ def test_every_mapping_is_consistent_with_its_outcome_set():
 
     for (is_live, odd_type_id), market_id in ODD_TYPE_MARKET.items():
         market = MARKETS[market_id]
-        special = "0:1" if "HANDIKAP" in market_id else ("2.5" if market.needs_special else None)
+        special = sample_special_bet_value(market)
         siblings = tuple(OUTCOMES_BY_ODD_TYPE.get((is_live, odd_type_id), ()))
         for outcome in siblings:
             if outcome.strip() in market.stray_outcomes:

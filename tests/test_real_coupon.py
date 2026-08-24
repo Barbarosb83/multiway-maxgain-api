@@ -388,3 +388,167 @@ def test_odd_id_path_needs_no_outcome_field():
         w["outcome"] for m in body["matches"] for g in m["groups"] for w in g["winningSelections"]
     }
     assert outcomes <= {"1", "X", "2", "1X", "12", "Yes", "No"}
+
+
+# --------------------------------------------------------------------------- #
+# Canlı kupon -- BetType = 1, negatif matchId, anlık skor taşıyan
+# specialBetValue ve boş string
+# --------------------------------------------------------------------------- #
+
+LIVE_COUPON = [
+    {
+        "MatchId": -13996108,
+        "EventName": "Jong PSV - TOP Oss",
+        "Banko": False,
+        "BetType": 1,
+        "OddsTypeId": 3,
+        "OutCome": "1",
+        "SpecialBetValue": "0:0",
+        "OddValue1": 1.9,
+    },
+    {
+        "MatchId": -13996108,
+        "EventName": "Jong PSV - TOP Oss",
+        "Banko": False,
+        "BetType": 1,
+        "OddsTypeId": 11,
+        "OutCome": "2",
+        "SpecialBetValue": "0:0",
+        "OddValue1": 2.4,
+    },
+    {
+        "MatchId": -13996109,
+        "EventName": "Jong Utrecht-Heracles Almelo",
+        "Banko": False,
+        "BetType": 1,
+        "OddsTypeId": 708,
+        "OutCome": "2",
+        "SpecialBetValue": "",
+        "OddValue1": 1.02,
+    },
+    {
+        "MatchId": -13996109,
+        "EventName": "Jong Utrecht-Heracles Almelo",
+        "Banko": False,
+        "BetType": 1,
+        "OddsTypeId": 710,
+        "OutCome": "Under",
+        "SpecialBetValue": "3.5",
+        "OddValue1": 3.25,
+    },
+]
+
+
+@pytest.fixture(scope="module")
+def live_result() -> dict:
+    payload = {
+        "couponAmount": "100.00",
+        "selections": [
+            {
+                "matchId": row["MatchId"],
+                "isLive": row["BetType"],  # BetType canlı bayrağını taşır
+                "oddTypeId": row["OddsTypeId"],
+                "outcome": row["OutCome"],
+                "specialBetValue": row.get("SpecialBetValue"),
+                "odds": str(row["OddValue1"]),
+            }
+            for row in LIVE_COUPON
+        ],
+    }
+    response = client.post("/api/v1/coupons/max-gain", json=payload)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_negative_match_ids_are_accepted(live_result):
+    assert {m["matchId"] for m in live_result["matches"]} == {-13996108, -13996109}
+
+
+def test_blank_special_bet_value_is_treated_as_absent(live_result):
+    """Sağlayıcı alanı "" olarak gönderebiliyor; eşik gerektirmeyen piyasada sorun olmamalı."""
+    utrecht = next(m for m in live_result["matches"] if m["matchId"] == -13996109)
+    winner = next(
+        w for w in utrecht["groups"][0]["winningSelections"] if w["oddTypeName"] == "Winner"
+    )
+    assert winner["specialBetValue"] is None
+
+
+def test_live_winner_and_total_share_one_group(live_result):
+    """Deplasman galibiyeti ile 3.5 alt birlikte tutabilir (0-1)."""
+    utrecht = next(m for m in live_result["matches"] if m["matchId"] == -13996109)
+    assert utrecht["weight"] == "4.27"  # 1.02 + 3.25
+    assert utrecht["groups"][0]["combined"] is True
+
+
+def test_next_goal_market_stays_isolated(live_result):
+    """Gol sırası maç sonu skorundan çıkarılamaz; bağımsız sayılır."""
+    psv = next(m for m in live_result["matches"] if m["matchId"] == -13996108)
+    assert psv["weight"] == "4.30"  # 1.90 + 2.40, iki ayrı grup
+    assert {g["group"] for g in psv["groups"]} == {"SCORE", "UNMAPPED:1:11"}
+    assert any("oddType 11 (live)" in w for w in live_result["warnings"])
+
+
+def test_live_coupon_totals(live_result):
+    assert live_result["stake"]["lineCount"] == 4
+    assert live_result["maxGain"] == "459.02"
+    assert live_result["maxSingleLineGain"] == "195.00"
+
+
+def rest_of_match(outcome: str, odds: str, current: str) -> dict:
+    return {
+        "matchId": 1,
+        "isLive": 1,
+        "oddTypeId": 3,  # live "Rest of match"
+        "outcome": outcome,
+        "specialBetValue": current,
+        "odds": odds,
+    }
+
+
+def winner(outcome: str, odds: str) -> dict:
+    return {"matchId": 1, "isLive": 1, "oddTypeId": 708, "outcome": outcome, "odds": odds}
+
+
+@pytest.mark.parametrize(
+    ("rest", "final", "expected"),
+    [
+        # Anlık skor 1:0 (ev önde); kalan @2.60, maç sonucu @1.50
+        ("1", "2", "2.60"),  # ev kalanı da alırsa deplasman kazanamaz -> max
+        ("2", "1", "2.60"),  # deplasman kalanı alırsa ev öne geçemez -> max
+        ("2", "x", "4.10"),  # 1-1 mümkün -> toplanır
+    ],
+    ids=["kalan1-ms2", "kalan2-ms1", "kalan2-msX"],
+)
+def test_rest_of_match_uses_the_current_score(rest, final, expected):
+    """'Maçın kalanı' bahsi anlık skordan sonrasına yatırılır.
+
+    specialBetValue o anki skoru taşır; maç sonu skorundan düşülerek
+    değerlendirilir.
+    """
+    payload = {
+        "couponAmount": "100.00",
+        "selections": [rest_of_match(rest, "2.60", "1:0"), winner(final, "1.50")],
+    }
+    body = client.post("/api/v1/coupons/max-gain", json=payload).json()
+    assert body["matches"][0]["weight"] == expected
+
+
+def test_rest_of_match_from_nil_nil_equals_full_time_result():
+    """Anlık skor 0:0 iken piyasa maç sonucuyla aynıya indirgenir."""
+    compatible = client.post(
+        "/api/v1/coupons/max-gain",
+        json={
+            "couponAmount": "100.00",
+            "selections": [rest_of_match("1", "1.90", "0:0"), winner("1", "1.50")],
+        },
+    ).json()
+    assert compatible["matches"][0]["weight"] == "3.40"
+
+    contradictory = client.post(
+        "/api/v1/coupons/max-gain",
+        json={
+            "couponAmount": "100.00",
+            "selections": [rest_of_match("1", "1.90", "0:0"), winner("2", "3.00")],
+        },
+    ).json()
+    assert contradictory["matches"][0]["weight"] == "3.00"

@@ -50,6 +50,12 @@ class SelectionIn(StrictBase):
     )
     odds: Odds = Field(description="Ondalık oran; 1.00'den büyük olmalı")
 
+    @field_validator("special_bet_value")
+    @classmethod
+    def _blank_special_is_absent(cls, value: str | None) -> str | None:
+        """Sağlayıcı alanı boş string olarak gönderebiliyor; yokluk sayılır."""
+        return value or None
+
     @field_validator("odds")
     @classmethod
     def _normalize_odds(cls, value: Decimal) -> Decimal:
