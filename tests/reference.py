@@ -11,7 +11,7 @@ Motorun hiçbir kısayolunu paylaşmaz:
                  senaryolar
 
 Üstel karmaşıklıkta olduğu için sadece küçük kuponlarda çalıştırılabilir ve
-sabit bir skor uzayı (``JOINT``, tavan 8) varsayar; testler bu sınır içinde
+sabit bir skor uzayı (``HALVES``, tavan 6) varsayar; testler bu sınır içinde
 kalan kuponlar üretir.
 """
 
@@ -25,8 +25,8 @@ from app.services.markets import UnknownOutcome, get_space, mask_for, required_b
 from app.services.max_gain import CouponInput, SelectionInput
 from app.services.odd_types import resolve_odd_type
 
-REFERENCE_BOUND = 8
-_SPACE = get_space("JOINT", REFERENCE_BOUND)
+REFERENCE_BOUND = 6
+_SPACE = get_space("HALVES", REFERENCE_BOUND)
 
 
 def _selection_mask(selection: SelectionInput) -> int | None:

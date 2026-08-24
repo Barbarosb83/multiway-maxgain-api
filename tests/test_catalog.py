@@ -46,7 +46,7 @@ def test_every_mapping_is_consistent_with_its_outcome_set():
     Bu, eşlemelerin gözle değil veriyle doğrulanmasıdır: yanlış bir eşleme
     çelişen seçimleri sessizce uyumlu gösterip max gain'i şişirebilir.
     """
-    space = get_space("JOINT", 8)
+    space = get_space("HALVES", 6)
     failures: list[str] = []
 
     for (is_live, odd_type_id), market_id in ODD_TYPE_MARKET.items():
@@ -89,7 +89,7 @@ def test_stray_catalog_outcomes_do_not_block_the_mapping():
 
 def test_aggregate_outcome_is_the_complement_of_its_siblings():
     """'Others' listelenen skorların hiçbiri demektir."""
-    space = get_space("FLAT", 8)
+    space = get_space("MATCH", 8)
     siblings = tuple(OUTCOMES_BY_ODD_TYPE[(0, 1456)])
     assert any(is_aggregate(o) for o in siblings)
 

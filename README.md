@@ -64,6 +64,8 @@ olması **değil**, aynı anda gerçekleşebilir olmalarıdır:
 | `Alt 0.5` + `Üst 2.5` | ✗ toplam hem 0 hem 3+ olamaz | **max** |
 | `Üst 0.5` + `Üst 2.5` | ✓ toplam 3+ ise ikisi de tutar | **toplam** |
 | `1X2 "2"` + `Alt 0.5` | ✗ deplasman kazanırsa en az 1 gol var | **max** |
+| `"Over and home"` + `1X2 "2"` | ✗ kombine piyasa ev galibiyeti şart koşuyor | **max** |
+| `Ç1 Handikap 0:25` + `Ç1 Alt 20.5` | ✗ 26+ fark ile 20'den az toplam olmaz | **max** |
 
 Dolayısıyla maçın ağırlığı, *birlikte gerçekleşebilen* seçim alt kümeleri arasında oran toplamı
 en yüksek olanıdır:
@@ -88,17 +90,22 @@ Her `(oddTypeId, outcome, specialBetValue)` üçlüsü, kazandığı atomların 
 skorlarının **aynı** atomda tutulması sayesinde `"İY 2-0"` ile `"MS 1.5 Alt"` gibi çelişkiler de
 kendiliğinden elenir.
 
-**Uzay maça göre uyarlanır.** Skor tavanı sabit değildir; o maçtaki seçimlerin eşiklerinden
-türetilir — futbolda `2.5` için 4'lük tavan yeter, basketbolda `220.5` için ~222 gerekir:
+**Uzay maça göre uyarlanır.** Hem yerleşim hem skor tavanı, o maçtaki seçimlerden türetilir —
+futbolda `2.5` için 4'lük tavan yeter, basketbolda `220.5` için ~222 gerekir:
 
-| Uzay | Atomlar | Ne zaman |
+| Yerleşim | Atom | Ne zaman |
 |---|---|---|
-| `FLAT` | `(0, 0, ev, dep)` | Grup tek periyoda ait; büyük tavanlara izin verir (basketbol, kriket) |
-| `HALF` | `(ev, dep, ev, dep)` | Yalnızca ilk yarı piyasaları |
-| `JOINT` | dört boyutlu | Periyotlar karışıyor; ilk yarı + maç sonu çelişkilerini yakalar |
+| `MATCH` | `(ev, dep)` | Gruptaki seçimler **tek periyoda** ait — maç sonu, ilk yarı, 2. çeyrek, 3. periyot fark etmez. İki boyutlu olduğu için büyük skorlara yer kalır. |
+| `HALVES` | `(İY_ev, İY_dep, 2Y_ev, 2Y_dep)` | İlk yarı / ikinci yarı / maç sonu birlikte. Maç sonu iki yarının toplamıdır; `"İY 2-0"` ile `"MS 1.5 Alt"` çelişkisi böyle yakalanır. |
 
-Ortak uzay atom sınırını (65k) aşarsa hesap periyotlara bölünür ve bu `warnings` ile bildirilir;
-periyotlar arası çelişki tespiti kaybolur ama sonuç asla düşmez.
+Yüklemler atomun ham indekslerine değil, periyot skorlarına bakar. Bu sayede tek bir "maç sonucu"
+tanımı maç sonu, ilk yarı, çeyrek ve periyot varyantlarında yeniden kullanılır — katalogdaki
+`1st Quarter - Points Spread` ile `1st Quarter - Total Spread` aynı kısıt grubuna düşer ve
+çelişirlerse yakalanır.
+
+Ortak yerleşim atom sınırını (65k) aşarsa ya da karışan periyotlar yarılarla ifade edilemiyorsa
+(çeyrek + maç sonu gibi) hesap periyotlara bölünür ve bu `warnings` ile bildirilir; periyotlar
+arası çelişki tespiti kaybolur ama sonuç asla düşmez.
 
 En iyi alt küme, budamalı bir derinlik-öncelikli aramayla bulunur: kalan oranların toplamı mevcut
 en iyiyi geçemiyorsa dal kesilir. Yanıt, seçilen alt kümeyi **ve onu gerçekleyen örnek skoru** döner.
@@ -117,7 +124,7 @@ Dört katalog da repoda tutulur:
 | [`data/outcomes_live.csv`](data/outcomes_live.csv) | `oddTypeId, oddId, outcome` |
 
 `GET /api/v1/odd-types` piyasaları listeler (`isLive`, `q`, `limit`, `offset` ile süzülür).
-**1426 piyasanın ve 8965 oddId'nin tamamı yüklenir; 185 piyasanın anlamı eşlenmiştir.**
+**1426 piyasanın ve 8965 oddId'nin tamamı yüklenir; 289 piyasanın anlamı eşlenmiştir.**
 
 ### Eşlemeler veriyle doğrulanır
 
@@ -167,7 +174,13 @@ Tanımlı piyasalar ([`app/services/markets.py`](app/services/markets.py)):
 `IY_ALT_UST` · `IY2_ALT_UST` · `HANDIKAP` · `IY_HANDIKAP` · `GOL_SAYISI` · `GOL_SAYISI_EV` ·
 `GOL_SAYISI_DEP` · `IY_GOL_SAYISI` · `IY2_GOL_SAYISI` · `IY_GOL_SAYISI_EV` ·
 `IY_GOL_SAYISI_DEP` · `KARSILIKLI_GOL` · `DOGRU_SKOR` · `IY_MS` · `TEK_CIFT` · `IY_TEK_CIFT` ·
-`TOPLAM_GOL` · `IY2_HANDIKAP`
+`GOL_SAYISI` · `KOMBINE` · `EV_VEYA_KG` … ve bunların **ilk yarı, ikinci yarı, 1–4. çeyrek,
+1–5. periyot** varyantları (`Q1_HANDIKAP`, `P2_ALT_UST`, `IY2_KOMBINE` …) — toplam 174 tanım.
+
+**Kombine piyasalar** iki koşulun kesişimidir ve outcome'ları `"Over and home"`, `"Home / Yes"`,
+`"DrawAway / Under"` gibi iki bileşenlidir. Ayrıştırıcı bileşenleri (sonuç, çift şans, alt/üst,
+karşılıklı gol) tanır ve sırası önemsizdir; katalog hem `"Over and home"` hem `"away and over"`
+biçimini kullanıyor. `Home Or Both Teams To Score` gibi **birleşim** piyasaları da ayrıca modellenir.
 
 Bu sağlayıcıda `Spread` handikap ya da alt/üst demektir (`Points Spread`, `Total Spreads`,
 `Goal Spread Main Line`), `AAMS regular time` ise düzenli oyun süresini kapsayan tam maç

@@ -57,10 +57,10 @@ def test_odd_type_catalog_is_exposed():
 def test_odd_type_catalog_filters_by_namespace_and_name():
     pre = client.get("/api/v1/odd-types", params={"isLive": 0, "q": "double chance"}).json()
     assert all(item["isLive"] == 0 for item in pre["items"])
-    # Arama devre varyantlarını da bulur; tam maç çift şansı bunlardan biridir.
+    # Arama devre/çeyrek varyantlarını ve kombine piyasaları da bulur.
     mapped = {i["marketId"] for i in pre["items"] if i["mapped"]}
     assert "CIFT_SANS" in mapped
-    assert mapped <= {"CIFT_SANS", "IY_CIFT_SANS", "IY2_CIFT_SANS"}
+    assert all("CIFT_SANS" in market or "KOMBINE" in market for market in mapped)
 
     live = client.get("/api/v1/odd-types", params={"isLive": 1, "q": "double chance"}).json()
     assert all(item["isLive"] == 1 for item in live["items"])

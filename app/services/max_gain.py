@@ -43,11 +43,12 @@ from dataclasses import dataclass, replace
 from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal, localcontext
 
 from app.services.markets import (
+    HALF_PERIODS,
     MAX_SCORE_BOUND,
     UnknownOutcome,
     describe_atom,
     get_space,
-    joint_fits,
+    layout_fits,
     mask_for,
     required_bound,
 )
@@ -270,29 +271,33 @@ class _Resolved:
 
 
 def _plan_space(periods: set[str], bound: int) -> tuple[str, bool]:
-    """(uzay türü, bölme gerekli mi) döner.
+    """(yerleşim, bölme gerekli mi) döner.
 
-    Tek periyotluk gruplar iki boyutlu uzayda çözülür ve büyük tavanlara
-    (basketbol, kriket) izin verir. Birden fazla periyot karışıyorsa dört
-    boyutlu ortak uzay gerekir; o da atom sınırına sığmıyorsa grup periyotlara
+    Tek periyotluk gruplar iki boyutlu ``MATCH`` yerleşiminde çözülür; periyodun
+    hangisi olduğu fark etmez (maç sonu, ilk yarı, 2. çeyrek, 3. periyot) ve
+    büyük skorlara (basketbol, kriket) yer kalır.
+
+    İlk yarı / ikinci yarı / maç sonu birlikte geldiğinde dört boyutlu
+    ``HALVES`` yerleşimi gerekir. Bu da atom sınırına sığmıyorsa ya da karışan
+    periyotlar yarılarla ifade edilemiyorsa (çeyrek, periyot) grup periyotlara
     bölünür.
     """
-    if periods <= {"FT"} or periods <= {"2H"}:
-        return "FLAT", False
-    if periods <= {"HT"}:
-        return "HALF", False
-    return ("JOINT", False) if joint_fits(bound) else ("JOINT", True)
+    if len(periods) == 1:
+        return "MATCH", False
+    if periods <= HALF_PERIODS:
+        return "HALVES", not layout_fits("HALVES", bound)
+    return "HALVES", True
 
 
 def _solve_group(
-    entries: list[tuple[SelectionInput, int]], space_key: tuple[str, int]
+    entries: list[tuple[SelectionInput, int]], space_key: tuple[str, int], period: str
 ) -> tuple[Decimal, list[SelectionInput], dict[str, str] | None]:
     """Bir kısıt grubundaki en iyi uyumlu alt kümeyi çözer."""
     space = get_space(*space_key)
     items = [(selection.odds, mask) for selection, mask in entries]
     total, chosen, final_mask = _best_compatible_subset(items, space.full_mask)
     winners = [entries[index][0] for index in chosen]
-    scoreline = describe_atom(space, (final_mask & -final_mask).bit_length() - 1)
+    scoreline = describe_atom(space, (final_mask & -final_mask).bit_length() - 1, period)
     return total, winners, scoreline
 
 
@@ -342,6 +347,7 @@ def _resolve_match(
 
     groups: OrderedDict[str, list[tuple[SelectionInput, int]]] = OrderedDict()
     space_keys: dict[str, tuple[str, int]] = {}
+    group_periods: dict[str, str] = {}
 
     if resolved:
         bound = _quantize_bound(max(item.bound for item in resolved))
@@ -349,9 +355,14 @@ def _resolve_match(
         kind, must_split = _plan_space(periods, bound)
 
         if must_split:
+            reason = (
+                f"skor tavanı {bound} ile ortak modelleme atom sınırını aşıyor"
+                if periods <= HALF_PERIODS
+                else f"karışan periyotlar ({', '.join(sorted(periods))}) tek uzayda "
+                "ifade edilemiyor"
+            )
             warnings.append(
-                f"Maç {match_id}: skor tavanı {bound} ile ilk yarı ve maç sonu birlikte "
-                "modellenemeyecek kadar büyük; periyotlar ayrı ayrı değerlendirildi "
+                f"Maç {match_id}: {reason}; periyotlar ayrı ayrı değerlendirildi "
                 "(periyotlar arası çelişkiler tespit edilemez)."
             )
             buckets: OrderedDict[str, list[_Resolved]] = OrderedDict()
@@ -362,8 +373,7 @@ def _resolve_match(
 
         for period, items in buckets.items():
             group_bound = _quantize_bound(max(item.bound for item in items))
-            group_kind = kind if not must_split else ("HALF" if period == "HT" else "FLAT")
-            space_key = (group_kind, group_bound)
+            space_key = ("MATCH" if must_split else kind, group_bound)
             name = "SCORE" if not period else f"SCORE:{period}"
 
             for item in items:
@@ -381,6 +391,7 @@ def _resolve_match(
                 if mask:
                     groups.setdefault(name, []).append((item.selection, mask))
                     space_keys[name] = space_key
+                    group_periods[name] = item.period
                 else:
                     isolate(
                         item.selection,
@@ -394,7 +405,9 @@ def _resolve_match(
     weight = Decimal(0)
 
     for name, entries in groups.items():
-        total, winners, scoreline = _solve_group(entries, space_keys[name])
+        total, winners, scoreline = _solve_group(
+            entries, space_keys[name], group_periods.get(name, "FT")
+        )
         weight += total
         resolutions.append(_group_out(name, total, winners, scoreline))
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic.alias_generators import to_camel
 
 from app.core.config import settings
 from app.models.schemas import CouponIn, ErrorOut, MaxGainOut, OddTypeOut, OddTypePage
@@ -89,7 +90,11 @@ def _to_response(result: MaxGainResult, original_ids: dict[str, str | int]) -> M
                         "odds_sum": group.odds_sum,
                         "combined": group.combined,
                         "winning_selections": [w.__dict__ for w in group.winning_selections],
-                        "scoreline": group.scoreline,
+                        "scoreline": (
+                            {to_camel(key): value for key, value in group.scoreline.items()}
+                            if group.scoreline
+                            else None
+                        ),
                     }
                     for group in match.groups
                 ],

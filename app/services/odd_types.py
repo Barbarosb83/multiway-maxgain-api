@@ -203,6 +203,85 @@ def _read_rows(path: Path) -> list[list[str]]:
         return [row for row in csv.reader(handle) if row and row[0].strip().isdigit()]
 
 
+def _period_variants() -> dict[str, str]:
+    """Çeyrek ve periyot piyasalarının ad eşlemelerini üretir.
+
+    Katalogda bunlar hem "1st Quarter - Points Spread" hem "Total for first
+    period" gibi iki ayrı kalıpta geçiyor; ikisi de üretilir.
+    """
+    ordinals = ["first", "second", "third", "fourth", "fifth"]
+    short = ["1st", "2nd", "3rd", "4th", "5th"]
+    suffixes = {
+        "1x2": "1X2",
+        "3way": "1X2",
+        "matchbet aams": "1X2",
+        "draw no bet": "DNB",
+        "draw nobet": "DNB",
+        "double chance": "CIFT_SANS",
+        "total": "ALT_UST",
+        "totals": "ALT_UST",
+        "asian total": "ALT_UST",
+        "total spread": "ALT_UST",
+        "total aams": "ALT_UST",
+        "points spread": "HANDIKAP",
+        "goal spreads": "HANDIKAP",
+        "handicap": "HANDIKAP",
+        "asian handicap": "HANDIKAP",
+        "odd/even": "TEK_CIFT",
+        "odd/even points": "TEK_CIFT",
+        "odd/even goals": "TEK_CIFT",
+        "both teams to score": "KARSILIKLI_GOL",
+    }
+
+    table: dict[str, str] = {}
+    for index in range(5):
+        for kind, prefix in (("Q", "quarter"), ("P", "period")):
+            if kind == "Q" and index >= 4:
+                continue
+            key = f"{kind}{index + 1}"
+            for suffix, market_suffix in suffixes.items():
+                market_id = f"{key}_{market_suffix}"
+                if market_id not in MARKETS:
+                    continue
+                # "1st Quarter - Points Spread" ve "1st Quarter 1X2"
+                table[f"{short[index]} {prefix} - {suffix}"] = market_id
+                table[f"{short[index]} {prefix} {suffix}"] = market_id
+                # "Total for first period"
+                table[f"{suffix} for {ordinals[index]} {prefix}"] = market_id
+                table[f"{suffix} {ordinals[index]} {prefix}"] = market_id
+    return table
+
+
+# Kombine ve birleşim piyasaları. Outcome'ları "Over and home", "Home / Yes",
+# "DrawAway / Under" gibi iki bileşenlidir; ayrıştırıcı bileşenleri tanır.
+_COMBO_NAMES: dict[str, str] = {
+    "matchbet and totals": "KOMBINE",
+    "matchbet + totals": "KOMBINE",
+    "matchbet and total": "KOMBINE",
+    "matchbet and both teams to score": "KOMBINE",
+    "matchbet + both teams to score": "KOMBINE",
+    "both score + totals": "KOMBINE",
+    "double chance and total": "KOMBINE",
+    "double chance and both teams score": "KOMBINE",
+    "double chance (1x - 12 - x2) and totals": "KOMBINE",
+    "double chance (1x - 12 - x2) and both teams to score": "KOMBINE",
+    "1st half - matchbet and both teams to score": "IY_KOMBINE",
+    "first half - matchbet + totals": "IY_KOMBINE",
+    "first half - matchbet + both teams to score": "IY_KOMBINE",
+    "first half - matchbet and totals [total]": "IY_KOMBINE",
+    "1st half - double chance and both teams score": "IY_KOMBINE",
+    "2nd half - matchbet and total": "IY2_KOMBINE",
+    "2nd half - matchbet and totals": "IY2_KOMBINE",
+    "2nd half - matchbet and both teams score": "IY2_KOMBINE",
+    "2nd half - matchbet and both teams to score": "IY2_KOMBINE",
+    "2nd half - double chance and both teams score": "IY2_KOMBINE",
+    # Birleşim (VEYA) piyasaları
+    "home or both teams to score": "EV_VEYA_KG",
+    "draw or both teams to score": "BERABERE_VEYA_KG",
+    "away or both teams to score": "DEP_VEYA_KG",
+}
+
+
 def _load_names() -> dict[tuple[int, int], str]:
     names: dict[tuple[int, int], str] = {}
     for is_live, path in _SOURCES.items():
@@ -229,6 +308,12 @@ def _load_outcomes() -> tuple[
     return by_odd_id, by_odd_type
 
 
+_EFFECTIVE_NAME_MAP: dict[str, str] = {
+    **_NAME_TO_MARKET,
+    **_COMBO_NAMES,
+    **_period_variants(),
+}
+
 ODD_TYPE_NAME = _load_names()
 OUTCOME_BY_ODD_ID, OUTCOMES_BY_ODD_TYPE = _load_outcomes()
 
@@ -252,7 +337,7 @@ def _build_market_map() -> tuple[dict[tuple[int, int], str], list[tuple[int, int
     rejected: list[tuple[int, int, str, str]] = []
 
     for key, name in ODD_TYPE_NAME.items():
-        market_id = _NAME_TO_MARKET.get(_normalize(name))
+        market_id = _EFFECTIVE_NAME_MAP.get(_normalize(name))
         if market_id is None:
             continue
 

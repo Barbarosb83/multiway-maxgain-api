@@ -196,17 +196,6 @@ class CouponIn(StrictBase):
 # --------------------------------------------------------------------------- #
 
 
-class ScorelineOut(Base):
-    """Grubu gerçekleyen örnek skor.
-
-    Kullanılan sonuç uzayına göre yalnızca biri dolu olabilir: sadece maç sonu
-    piyasaları içeren bir grupta ilk yarı skoru modellenmez.
-    """
-
-    half_time: str | None = Field(default=None, description="En iyi senaryodaki ilk yarı skoru")
-    full_time: str | None = Field(default=None, description="En iyi senaryodaki maç sonu skoru")
-
-
 class WinningSelectionOut(Base):
     odd_id: int | None = None
     odd_type_id: int
@@ -222,8 +211,13 @@ class GroupResolutionOut(Base):
     odds_sum: Decimal = Field(description="Bu grubun maç ağırlığına katkısı")
     combined: bool = Field(description="True ise bu grupta birden fazla seçim aynı anda kazanıyor")
     winning_selections: list[WinningSelectionOut]
-    scoreline: ScorelineOut | None = Field(
-        default=None, description="Grubu gerçekleyen örnek skor (yalnızca gol bazlı piyasalarda)"
+    scoreline: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Grubu gerçekleyen örnek skor. Anahtarlar modellenen periyotlardır: "
+            "`fullTime`, `halfTime`, `quarter1`, `period2` gibi. Yalıtılmış "
+            "gruplarda boştur."
+        ),
     )
 
 
