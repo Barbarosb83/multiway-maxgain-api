@@ -112,7 +112,7 @@ def to_request(rows: list[dict], coupon_amount: str) -> dict:
                 "isLive": 0,
                 "oddTypeId": row["OddsTypeId"],
                 "outcome": row["OutCome"],
-                "specialBetValue": row["SpecialBetValue"],
+                "specialBetValue": row.get("SpecialBetValue"),
                 "odds": str(row["OddValue1"]),
             }
             for row in rows
@@ -313,3 +313,78 @@ def test_integer_odds_are_reported_with_two_decimals(result):
     halle = next(m for m in result["matches"] if m["matchId"] == 71960094)
     assert halle["groups"][0]["winningSelections"][0]["odds"] == "6.00"
     assert halle["weight"] == "6.00"
+
+
+# --------------------------------------------------------------------------- #
+# Üretim yolu: seçim yalnızca oddId ile tanımlanır
+# --------------------------------------------------------------------------- #
+
+# Katalogdaki oddId'ler (pre uzayı)
+ODD_IDS = {
+    (1839, "1"): 1970,
+    (1839, "X"): 1971,
+    (1839, "2"): 1972,
+    (1467, "Yes"): 2294,
+    (1467, "No"): 2295,
+    (1481, "1X"): 2307,
+    (1481, "12"): 2308,
+}
+
+# Sağlayıcı gövdesindeki outcome kodunun kanonik karşılığı
+CANONICAL = {"x": "X", "J": "Yes", "Y": "Yes", "N": "No"}
+
+
+def to_odd_id_request(rows: list[dict], coupon_amount: str) -> dict:
+    """Aynı kuponu yalnızca ``oddId`` ile tanımlar -- üretimde kullanılacak yol."""
+    return {
+        "couponAmount": coupon_amount,
+        "selections": [
+            {
+                "matchId": row["MatchId"],
+                "isLive": 0,
+                "oddId": ODD_IDS[
+                    (row["OddsTypeId"], CANONICAL.get(row["OutCome"], row["OutCome"]))
+                ],
+                "specialBetValue": row.get("SpecialBetValue"),
+                "odds": str(row["OddValue1"]),
+            }
+            for row in rows
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    ("rows", "expected_gain"),
+    [(PROVIDER_COUPON, "8983.99"), (ENGLISH_COUPON, "2500.80")],
+    ids=["almanca", "ingilizce"],
+)
+def test_odd_id_path_matches_odd_type_and_outcome_path(rows, expected_gain):
+    """İki tanımlama yolu birebir aynı sonucu vermeli.
+
+    Üretimde seçim ``oddId`` ile gelir; ``oddTypeId`` + ``outcome`` yolu ancak
+    ``oddId`` yoksa devreye girer. İkisinin aynı sonucu vermesi, çok dilli
+    outcome çözümlemesinin katalogla tutarlı olduğunu da doğrular.
+    """
+    by_odd_id = client.post(
+        "/api/v1/coupons/max-gain", json=to_odd_id_request(rows, "100.00")
+    ).json()
+    by_name = client.post("/api/v1/coupons/max-gain", json=to_request(rows, "100.00")).json()
+
+    assert by_odd_id["warnings"] == []
+    assert by_odd_id["maxGain"] == by_name["maxGain"] == expected_gain
+    assert by_odd_id["stake"]["lineCount"] == by_name["stake"]["lineCount"]
+    assert [m["weight"] for m in by_odd_id["matches"]] == [m["weight"] for m in by_name["matches"]]
+
+
+def test_odd_id_path_needs_no_outcome_field():
+    """oddId verildiğinde gövdede outcome hiç bulunmayabilir."""
+    payload = to_odd_id_request(ENGLISH_COUPON, "100.00")
+    assert all("outcome" not in selection for selection in payload["selections"])
+
+    body = client.post("/api/v1/coupons/max-gain", json=payload).json()
+    assert body["maxGain"] == "2500.80"
+    # Katalogdan gelen kanonik adlar döner ("Y" değil "Yes")
+    outcomes = {
+        w["outcome"] for m in body["matches"] for g in m["groups"] for w in g["winningSelections"]
+    }
+    assert outcomes <= {"1", "X", "2", "1X", "12", "Yes", "No"}
