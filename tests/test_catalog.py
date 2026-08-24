@@ -68,6 +68,13 @@ def test_rejected_mappings_are_exactly_the_documented_ones():
     assert rejected == set(KNOWN_UNMAPPABLE)
 
 
+def test_same_name_different_shape_is_rejected_not_guessed():
+    """'Winner' hem 1X2 hem çok yarışmacılı outright olabilir; ad tek başına yetmez."""
+    assert ODD_TYPE_MARKET[(1, 708)] == "MS_1X2"  # outcome'ları 1 / x / 2
+    assert (1, 180) not in ODD_TYPE_MARKET  # outcome'ları competitor_1..14
+    assert (1, 180) in KNOWN_UNMAPPABLE
+
+
 def test_aggregate_outcome_is_the_complement_of_its_siblings():
     """'Others' listelenen skorların hiçbiri demektir."""
     space = get_space("FLAT", 8)
@@ -91,6 +98,10 @@ def test_aggregate_outcome_is_the_complement_of_its_siblings():
         (0, 1628, "IY_GOL_SAYISI"),  # 1st Half - Total Goals -> 0/1/2+
         (0, 1487, "GOL_SAYISI_EV"),  # Goals Home -> 0/1/2/3+
         (0, 1762, "ALT_UST_3WAY"),  # Total 3way -> Over/X/Under
+        (0, 1501, "ALT_UST"),  # Total Spreads -> Alt/Üst
+        (0, 1496, "HANDIKAP"),  # Points Spread -> handikap
+        (1, 708, "MS_1X2"),  # live ana piyasa: Winner
+        (1, 483, "MS_1X2"),  # Matchbet AAMS regular time
         (1, 24, "CIFT_SANS"),
         (1, 178, "IY_MS"),  # HH/HD/HA kodlaması
         (1, 750, "IY_MS"),  # 11/1X/21 kodlaması

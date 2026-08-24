@@ -117,7 +117,7 @@ Dört katalog da repoda tutulur:
 | [`data/outcomes_live.csv`](data/outcomes_live.csv) | `oddTypeId, oddId, outcome` |
 
 `GET /api/v1/odd-types` piyasaları listeler (`isLive`, `q`, `limit`, `offset` ile süzülür).
-**1426 piyasanın ve 8965 oddId'nin tamamı yüklenir; 158 piyasanın anlamı eşlenmiştir.**
+**1426 piyasanın ve 8965 oddId'nin tamamı yüklenir; 184 piyasanın anlamı eşlenmiştir.**
 
 ### Eşlemeler veriyle doğrulanır
 
@@ -131,7 +131,15 @@ sessiz yanlış, hatadan kötüdür. Bu kontrol gözle bulunamayacak üç hatay�
 | `1628 1st Half - Total Goals` | Alt/Üst | `0`, `1`, `2+` | tam sayı |
 | `1487 Goals Home` | Alt/Üst | `0`, `1`, `2`, `3+` | tam sayı |
 
-Doğrulanamayan iki id bilerek eşlenmemiştir (`KNOWN_UNMAPPABLE`) ve bir test listenin bundan
+Aynı kontrol, adın tek başına yetmediği durumları da ayıklar. Live katalogunda iki piyasa da
+`Winner` adını taşır:
+
+| id | Outcome kümesi | Sonuç |
+|---|---|---|
+| `live 708` | `1`, `x`, `2` | Maç sonucu — eşlendi (live'ın ana piyasası) |
+| `live 180` | `competitor_1` … `competitor_14` | Çok yarışmacılı outright — eşlenmedi |
+
+Doğrulanamayan üç id bilerek eşlenmemiştir (`KNOWN_UNMAPPABLE`) ve bir test listenin bundan
 ibaret kaldığını sabitler; yeni bir uyumsuzluk çıkarsa CI kırılır.
 
 `Others` / `other` / `C` gibi toplayıcı outcome'lar, kardeş outcome'ların **tümleyeni** olarak
@@ -154,7 +162,11 @@ Tanımlı piyasalar ([`app/services/markets.py`](app/services/markets.py)):
 `IY_ALT_UST` · `IY2_ALT_UST` · `HANDIKAP` · `IY_HANDIKAP` · `GOL_SAYISI` · `GOL_SAYISI_EV` ·
 `GOL_SAYISI_DEP` · `IY_GOL_SAYISI` · `IY2_GOL_SAYISI` · `IY_GOL_SAYISI_EV` ·
 `IY_GOL_SAYISI_DEP` · `KARSILIKLI_GOL` · `DOGRU_SKOR` · `IY_MS` · `TEK_CIFT` · `IY_TEK_CIFT` ·
-`TOPLAM_GOL`
+`TOPLAM_GOL` · `IY2_HANDIKAP`
+
+Bu sağlayıcıda `Spread` handikap ya da alt/üst demektir (`Points Spread`, `Total Spreads`,
+`Goal Spread Main Line`), `AAMS regular time` ise düzenli oyun süresini kapsayan tam maç
+piyasasıdır; ikisi de eşlenmiştir.
 
 > Asya handikabında `0` ve çeyrek çizgilerde iade/yarım kazanç vardır; burada kazanır/kazanmaz
 > olarak ele alınır. Bu, max gain'i düşürebilir ama asla şişirmez.
@@ -163,8 +175,12 @@ Tanımlı piyasalar ([`app/services/markets.py`](app/services/markets.py)):
 
 Anlamı eşlenmemiş ya da katalogda hiç olmayan bir id için güvenli geri düşüş uygulanır:
 aynı `(isLive, oddTypeId)`'nin farklı outcome'ları dışlayıcı (→ max), farklı id'ler bağımsız
-(→ toplam) sayılır ve durum `warnings` alanında bildirilir. Yani her kupon hesaplanır; yalnızca
-*farklı* id'lerin birbiriyle çeliştiği durumlar tespit edilemez.
+(→ toplam) sayılır ve durum `warnings` alanında bildirilir.
+
+Eşlenmemiş piyasaların büyük bölümü için bu **zaten doğru davranıştır**: korner, kart, set,
+periyot, harita gibi piyasalar maç skorundan farklı bir büyüklüğü ölçer ve gerçekten bağımsızdır.
+Eşleme yalnızca *aynı* büyüklüğü ölçen piyasalar arasında fark yaratır — orada da kaçırılan tek
+durum, farklı id'lerin birbiriyle çelişmesidir.
 
 ---
 

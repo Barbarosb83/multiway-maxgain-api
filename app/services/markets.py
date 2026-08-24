@@ -552,6 +552,14 @@ MARKETS: dict[str, MarketDef] = {
         ),
         _market("HANDIKAP", "Handikap", "FT", _handicap("FT"), ("1", "X", "2"), needs_special=True),
         _market(
+            "IY2_HANDIKAP",
+            "İkinci Yarı Handikap",
+            "2H",
+            _handicap("2H"),
+            ("1", "2"),
+            needs_special=True,
+        ),
+        _market(
             "IY_HANDIKAP",
             "İlk Yarı Handikap",
             "HT",

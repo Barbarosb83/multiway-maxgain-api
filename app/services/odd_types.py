@@ -79,6 +79,7 @@ _NAME_TO_MARKET: dict[str, str] = {
     "3way": "MS_1X2",
     "3 way": "MS_1X2",
     "1x2": "MS_1X2",
+    "winner": "MS_1X2",
     "3way aams": "MS_1X2",
     "total 3way": "ALT_UST_3WAY",
     "double chance": "CIFT_SANS",
@@ -119,6 +120,13 @@ _NAME_TO_MARKET: dict[str, str] = {
     "2nd half - total": "IY2_ALT_UST",
     "2nd half - totals": "IY2_ALT_UST",
     "2nd half - asian total": "IY2_ALT_UST",
+    "total spreads": "ALT_UST",
+    "total spreads (excl. superovers)": "ALT_UST",
+    "us total": "ALT_UST",
+    "2nd half - total spread": "IY2_ALT_UST",
+    # AAMS varyantları düzenli oyun süresini kapsar -- tam maç piyasalarıdır
+    "total aams regular time": "ALT_UST",
+    "matchbet aams regular time": "MS_1X2",
     "2nd half - total goals": "IY2_GOL_SAYISI",
     # --- Takım bazlı alt / üst ---
     "totals home": "ALT_UST_EV",
@@ -142,6 +150,18 @@ _NAME_TO_MARKET: dict[str, str] = {
     "1st half - handicap": "IY_HANDIKAP",
     "1st half - asian handicap": "IY_HANDIKAP",
     "1st half - european handicap": "IY_HANDIKAP",
+    # Bu sağlayıcıda "Spread" handikap/alt-üst anlamına gelir
+    "goal spreads": "HANDIKAP",
+    "goal spread main line": "HANDIKAP",
+    "points spread": "HANDIKAP",
+    "points spreads": "HANDIKAP",
+    "points spread main line": "HANDIKAP",
+    "us spread": "HANDIKAP",
+    "1st half - goal spread": "IY_HANDIKAP",
+    "1st half - points spread": "IY_HANDIKAP",
+    "1st half - points spreads": "IY_HANDIKAP",
+    "2nd half - points spread": "IY2_HANDIKAP",
+    "2nd half - handicap": "IY2_HANDIKAP",
     "asian handicap first half": "IY_HANDIKAP",
     "asian handicap 1st half": "IY_HANDIKAP",
     # --- Gol bazlı ---
@@ -264,6 +284,10 @@ ODD_TYPE_MARKET, REJECTED_MAPPINGS = _build_market_map()
 KNOWN_UNMAPPABLE: dict[tuple[int, int], str] = {
     (0, 1875): (
         "Outcome'lar kesirli set skorları ('0.5:1.5'); gol skoru değil, set/leg handikabı."
+    ),
+    (1, 180): (
+        "Adı 'Winner' ama outcome'lar 'competitor_1..14'; tek maç değil, "
+        "çok yarışmacılı outright piyasası."
     ),
     (1, 19): (
         "Outcome kümesi '1, 2, o, u' -- '1' ve '2'nin Üst/Alt karşılığı "
