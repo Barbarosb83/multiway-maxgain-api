@@ -190,6 +190,14 @@ def is_aggregate(outcome: str) -> bool:
     return _norm(outcome).replace(" ", "") in AGGREGATE_OUTCOMES
 
 
+def _unwrap(code: str) -> str:
+    """Sarmalayıcı parantezleri temizler: ``"(0:1)"`` -> ``"0:1"``.
+
+    Sağlayıcı handikap ve skor değerlerini kimi zaman parantez içinde gönderiyor.
+    """
+    return code.strip().strip("()[]{}").strip()
+
+
 def _number(text: str) -> float:
     return float(text.replace(",", "."))
 
@@ -197,7 +205,7 @@ def _number(text: str) -> float:
 def _line_from(outcome: str, special: str | None, label: str = "Alt/Üst") -> tuple[str, float]:
     """Alt/Üst yönü ve eşiği. Eşik öncelikle ``specialBetValue``'dan alınır."""
     code = _norm(outcome).replace(" ", "")
-    special_code = _norm(special)
+    special_code = _unwrap(_norm(special))
 
     if special_code and _NUM_RE.match(special_code):
         side = code.rstrip("0123456789.,+-") or code
@@ -223,7 +231,7 @@ def _line_from(outcome: str, special: str | None, label: str = "Alt/Üst") -> tu
 
 def _handicap_from(special: str | None) -> tuple[float, float]:
     """``"0:1"`` -> (0, 1); ``"-1.5"`` -> (-1.5, 0)."""
-    code = _norm(special).replace(" ", "")
+    code = _unwrap(_norm(special)).replace(" ", "")
     pair = _PAIR_RE.match(code)
     if pair:
         return _number(pair.group(1)), _number(pair.group(2))
@@ -234,7 +242,7 @@ def _handicap_from(special: str | None) -> tuple[float, float]:
 
 def _parse_count(outcome: str, special: str | None) -> tuple[int, int | None]:
     """'0' -> (0,0); '3+' -> (3,None); '0-1 goals' -> (0,1)."""
-    source = _norm(outcome) or _norm(special)
+    source = _norm(outcome) or _unwrap(_norm(special))
     source = re.sub(r"[A-ZÇĞİÖŞÜ]+\s*$", "", source).strip()
     match = _COUNT_RE.match(source.replace(" ", ""))
     if not match:
@@ -358,7 +366,7 @@ _NEGATIVE = {"YOK", "NO", "HAYIR", "H", "KGYOK", "NOGOAL", "N", "NEIN", "NON", "
 
 def parse_score(text: str | None) -> tuple[int, int] | None:
     """``"2:1"`` -> (2, 1). Çözümlenemezse None."""
-    match = _SCORE_RE.match(_norm(text))
+    match = _SCORE_RE.match(_unwrap(_norm(text)))
     return (int(match.group(1)), int(match.group(2))) if match else None
 
 
@@ -453,7 +461,7 @@ def _both_teams_to_score(outcome: str, _special: str | None) -> Predicate:
 
 
 def _correct_score(outcome: str, special: str | None) -> Predicate:
-    match = _SCORE_RE.match(_norm(outcome)) or _SCORE_RE.match(_norm(special))
+    match = _SCORE_RE.match(_norm(outcome)) or _SCORE_RE.match(_unwrap(_norm(special)))
     if not match:
         raise UnknownOutcome(f"Doğru skor outcome'u geçersiz: {outcome!r} ('2-1' bekleniyor)")
     home, away = int(match.group(1)), int(match.group(2))
@@ -461,7 +469,7 @@ def _correct_score(outcome: str, special: str | None) -> Predicate:
 
 
 def _correct_score_bound(outcome: str, special: str | None) -> int:
-    match = _SCORE_RE.match(_norm(outcome)) or _SCORE_RE.match(_norm(special))
+    match = _SCORE_RE.match(_norm(outcome)) or _SCORE_RE.match(_unwrap(_norm(special)))
     if not match:
         raise UnknownOutcome(f"Doğru skor outcome'u geçersiz: {outcome!r}")
     return max(int(match.group(1)), int(match.group(2))) + 1

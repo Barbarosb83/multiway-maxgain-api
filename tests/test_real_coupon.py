@@ -895,3 +895,150 @@ def test_positive_match_id_can_still_be_live():
     """matchId'nin işareti canlılığı belirlemez; BetType belirler."""
     body = client.post("/api/v1/coupons/max-gain", json=mismatched_request(corrected=True)).json()
     assert {m["matchId"] for m in body["matches"]} == {-13978035, 72478500}
+
+
+# --------------------------------------------------------------------------- #
+# Sistem ve banko -- gerçek bir pre-match kuponuyla
+# --------------------------------------------------------------------------- #
+
+SYSTEM_COUPON = [
+    {
+        "MatchId": 72723168,
+        "BetType": 0,
+        "OddsTypeId": 1839,
+        "OutCome": "1",
+        "SpecialBetValue": None,
+        "OddValue1": 2.15,
+    },
+    {
+        "MatchId": 72723168,
+        "BetType": 0,
+        "OddsTypeId": 1467,
+        "OutCome": "N",
+        "SpecialBetValue": None,
+        "OddValue1": 2.05,
+    },
+    {
+        "MatchId": 72723170,
+        "BetType": 0,
+        "OddsTypeId": 1839,
+        "OutCome": "1",
+        "SpecialBetValue": None,
+        "OddValue1": 2,
+    },
+    {
+        "MatchId": 72723170,
+        "BetType": 0,
+        "OddsTypeId": 1481,
+        "OutCome": "X2",
+        "SpecialBetValue": None,
+        "OddValue1": 1.7,
+    },
+    # specialBetValue parantezli geliyor
+    {
+        "MatchId": 72723172,
+        "BetType": 0,
+        "OddsTypeId": 1513,
+        "OutCome": "1",
+        "SpecialBetValue": "(0:1)",
+        "OddValue1": 1.85,
+    },
+    # kombine piyasa, katalogdakinden farklı kodlama: "1X/Y"
+    {
+        "MatchId": 72723172,
+        "BetType": 0,
+        "OddsTypeId": 1899,
+        "OutCome": "1X/Y",
+        "SpecialBetValue": "",
+        "OddValue1": 2.1,
+    },
+]
+
+
+def system_request(**extra) -> dict:
+    return {
+        "couponAmount": "100.00",
+        "selections": [
+            {
+                "matchId": row["MatchId"],
+                "isLive": row["BetType"],
+                "oddTypeId": row["OddsTypeId"],
+                "outcome": row["OutCome"],
+                "specialBetValue": row["SpecialBetValue"],
+                "odds": str(row["OddValue1"]),
+            }
+            for row in SYSTEM_COUPON
+        ],
+        **extra,
+    }
+
+
+def system_result(**extra) -> dict:
+    response = client.post("/api/v1/coupons/max-gain", json=system_request(**extra))
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_parenthesised_special_bet_value_is_parsed():
+    """Handikap değeri '(0:1)' biçiminde gelebiliyor."""
+    body = system_result()
+    galatasaray = next(m for m in body["matches"] if m["matchId"] == 72723172)
+    assert body["warnings"] == []
+    # 0:1 handikapla ev galibiyeti 2+ fark demek; kombine piyasa da karşılıklı
+    # gol istiyor -> 3-1 ikisini birden tutturur.
+    assert galatasaray["weight"] == "3.95"  # 1.85 + 2.10
+    assert galatasaray["groups"][0]["scoreline"]["fullTime"] == "3-1"
+
+
+def test_combo_outcome_in_short_form_is_understood():
+    """Katalog 'HomeDraw / Yes' derken kupon '1X/Y' gönderiyor."""
+    galatasaray = next(m for m in system_result()["matches"] if m["matchId"] == 72723172)
+    outcomes = {w["outcome"] for w in galatasaray["groups"][0]["winningSelections"]}
+    assert "1X/Y" in outcomes
+
+
+def test_double_chance_contradicting_the_result_is_dropped():
+    """Maç sonucu '1' ile çift şans 'X2' birlikte tutamaz."""
+    konya = next(m for m in system_result()["matches"] if m["matchId"] == 72723170)
+    assert konya["selectionCount"] == 2
+    assert konya["weight"] == "2.00"  # 1.70 elendi
+    assert [w["outcome"] for w in konya["groups"][0]["winningSelections"]] == ["1"]
+
+
+def test_full_parlay_totals():
+    body = system_result()
+    assert body["stake"]["lineCount"] == 8  # 2 x 2 x 2
+    assert body["maxGain"] == "414.75"  # 12.50 x 4.20 x 2.00 x 3.95
+
+
+@pytest.mark.parametrize(
+    ("sizes", "line_count", "expected_gain"),
+    [
+        # e_2(4.20, 2.00, 3.95) = 8.40 + 16.59 + 7.90 = 32.89; satır stake 100/12
+        ([2], 12, "274.08"),
+        # e_3 = 4.20 x 2.00 x 3.95 = 33.18; satır stake 5.00 -> 164.45 + 165.90
+        ([2, 3], 20, "330.35"),
+    ],
+    ids=["2li", "2li+3lu"],
+)
+def test_system_sizes(sizes, line_count, expected_gain):
+    body = system_result(system={"sizes": sizes})
+    assert body["stake"]["lineCount"] == line_count
+    assert body["maxGain"] == expected_gain
+
+
+def test_system_breakdown_splits_by_size():
+    body = system_result(system={"sizes": [2, 3]})
+    breakdown = {b["systemSize"]: b for b in body["breakdown"]}
+    assert breakdown[2]["lineCount"] == 12
+    assert breakdown[3]["lineCount"] == 8
+    assert breakdown[2]["grossGain"] == "164.45"
+    assert breakdown[3]["grossGain"] == "165.90"
+
+
+def test_banker_reduces_a_system_to_a_full_parlay():
+    """Üç maçlık kuponda biri banko + 2'li sistem = tam kombine."""
+    body = system_result(bankerMatchIds=[72723172], system={"sizes": [2]})
+    assert [m["matchId"] for m in body["matches"] if m["banker"]] == [72723172]
+    assert body["stake"]["lineCount"] == 8
+    assert body["maxGain"] == "414.75"

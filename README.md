@@ -17,7 +17,7 @@ Kupon, düz bir **seçim listesi**dir. Her seçim şunları taşır:
 | `isLive` | Event pre-match ise `0`, live ise `1`. Kimlikler bu bayrağa göre ilgili katalogda aranır. |
 | `oddId` | **Seçimin tekil kimliği.** Verildiğinde `oddTypeId` ve `outcome` katalogdan doldurulur. |
 | `currentScore` | Maçın o anki skoru (`"0:2"`). Canlı seçimlerde gönderilmeli; pre-match'te `"0:0"`. |
-| `specialBetValue` | Piyasaya göre değişir: Alt/Üst'te eşik (`"2.5"`), handikapta fark (`"0:1"`, `"-1.5"`), canlı "maçın kalanı"nda **bahis anındaki skor** (`"0:0"`). Gerektiren piyasalarda zorunlu. |
+| `specialBetValue` | Piyasaya göre değişir: Alt/Üst'te eşik (`"2.5"`), handikapta fark (`"0:1"`, `"-1.5"` — parantezli `"(0:1)"` de kabul edilir), canlı "maçın kalanı" ve "sıradaki gol"de **bahis anındaki skor** (`"0:0"`). Gerektiren piyasalarda zorunlu. |
 | `odds` | Ondalık oran (`> 1.00`) |
 | `oddTypeId`, `outcome` | `oddId` yoksa zorunlu; varsa yok sayılır (tutarsızlık uyarı olarak bildirilir). |
 
@@ -219,7 +219,8 @@ Tanımlı piyasalar ([`app/services/markets.py`](app/services/markets.py)):
 **Kombine piyasalar** iki koşulun kesişimidir ve outcome'ları `"Over and home"`, `"Home / Yes"`,
 `"DrawAway / Under"` gibi iki bileşenlidir. Ayrıştırıcı bileşenleri (sonuç, çift şans, alt/üst,
 karşılıklı gol) tanır ve sırası önemsizdir; katalog hem `"Over and home"` hem `"away and over"`
-biçimini kullanıyor. `Home Or Both Teams To Score` gibi **birleşim** piyasaları da ayrıca modellenir.
+biçimini kullanıyor. Kupon gövdesi aynı seçimi kısa kodla da gönderebiliyor — katalogdaki
+`"HomeDraw / Yes"` ile kupondaki `"1X/Y"` aynı maskeyi üretir. `Home Or Both Teams To Score` gibi **birleşim** piyasaları da ayrıca modellenir.
 
 Bu sağlayıcıda `Spread` handikap ya da alt/üst demektir (`Points Spread`, `Total Spreads`,
 `Goal Spread Main Line`), `AAMS regular time` ise düzenli oyun süresini kapsayan tam maç
