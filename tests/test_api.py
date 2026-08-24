@@ -335,3 +335,115 @@ def test_large_system_completes_quickly():
     )
     assert body["stake"]["lineCount"] == 1140  # C(20,3)
     assert body["maxGain"] == "800.00"
+
+
+# --------------------------------------------------------------------------- #
+# oddId ile seçim tanımlama
+# --------------------------------------------------------------------------- #
+
+# Outcome katalogundan (pre): 1571 = 3way "1", 2307 = Double Chance "1X",
+# 2309 = Double Chance "X2", 1541 = Over/Under "Over", 1542 = "Under"
+ODD_HOME = 1571
+ODD_1X = 2307
+ODD_X2 = 2309
+ODD_OVER = 1541
+ODD_UNDER = 1542
+
+
+def test_odd_id_fills_in_odd_type_and_outcome():
+    """Sadece oddId gönderilse yeter; ad ve piyasa katalogdan çözülür."""
+    body = post(
+        {
+            "couponAmount": "100.00",
+            "selections": [
+                {"matchId": 901, "oddId": ODD_HOME, "odds": "2.10"},
+                {"matchId": 901, "oddId": ODD_1X, "odds": "1.30"},
+            ],
+        }
+    )
+    group = body["matches"][0]["groups"][0]
+    assert body["matches"][0]["weight"] == "3.40"  # uyumlu -> toplandı
+    assert group["combined"] is True
+    assert {w["oddId"] for w in group["winningSelections"]} == {ODD_HOME, ODD_1X}
+    assert {w["outcome"] for w in group["winningSelections"]} == {"1", "1X"}
+    assert body["warnings"] == []
+
+
+def test_odd_id_makes_outcome_language_irrelevant():
+    """Çağıran outcome'u başka dilde yollasa da katalog esas alınır."""
+    body = post(
+        {
+            "couponAmount": "100.00",
+            "selections": [
+                {
+                    "matchId": 901,
+                    "oddId": ODD_OVER,
+                    "outcome": "Üst",
+                    "specialBetValue": "0.5",
+                    "odds": "1.90",
+                },
+                {
+                    "matchId": 901,
+                    "oddId": ODD_UNDER,
+                    "outcome": "Über",
+                    "specialBetValue": "2.5",
+                    "odds": "2.40",
+                },
+            ],
+        }
+    )
+    # Üst 0.5 ile Alt 2.5: toplam hem 1+ hem 2- olabilir -> uyumlu
+    assert body["matches"][0]["weight"] == "4.30"
+    assert [w["outcome"] for w in body["matches"][0]["groups"][0]["winningSelections"]] == [
+        "Over",
+        "Under",
+    ]
+
+
+def test_odd_id_contradiction_is_detected():
+    body = post(
+        {
+            "couponAmount": "100.00",
+            "selections": [
+                {"matchId": 901, "oddId": ODD_HOME, "odds": "2.10"},
+                {"matchId": 901, "oddId": ODD_X2, "odds": "1.45"},
+            ],
+        }
+    )
+    assert body["matches"][0]["weight"] == "2.10"
+
+
+def test_mismatched_odd_type_id_is_overridden_with_a_warning():
+    body = post(
+        {
+            "couponAmount": "100.00",
+            "selections": [
+                {"matchId": 901, "oddId": ODD_HOME, "oddTypeId": 9999, "odds": "2.10"},
+            ],
+        }
+    )
+    assert body["matches"][0]["groups"][0]["winningSelections"][0]["oddTypeId"] == 1565
+    assert any("katalog esas alındı" in w for w in body["warnings"])
+
+
+def test_unknown_odd_id_falls_back_with_a_warning():
+    body = post(
+        {
+            "couponAmount": "100.00",
+            "selections": [
+                {"matchId": 901, "oddId": 999999, "oddTypeId": MS, "outcome": "1", "odds": "2.10"},
+            ],
+        }
+    )
+    assert body["matches"][0]["weight"] == "2.10"
+    assert any("outcome katalogunda yok" in w for w in body["warnings"])
+
+
+def test_selection_without_odd_id_requires_odd_type_and_outcome():
+    payload = {
+        "couponAmount": "100.00",
+        "selections": [{"matchId": 901, "odds": "2.10"}],
+    }
+    response = client.post("/api/v1/coupons/max-gain", json=payload)
+    assert response.status_code == 422
+    assert "oddId verilmediğinde" in response.text

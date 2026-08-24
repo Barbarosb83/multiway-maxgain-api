@@ -39,7 +39,7 @@ toplamı, maç ağırlıklarının **elementer simetrik polinomu** ``e_k``'ya e�
 from __future__ import annotations
 
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal, localcontext
 
 from app.services.markets import (
@@ -51,7 +51,7 @@ from app.services.markets import (
     mask_for,
     required_bound,
 )
-from app.services.odd_types import resolve_odd_type
+from app.services.odd_types import OUTCOMES_BY_ODD_TYPE, resolve_odd_type, resolve_outcome
 
 __all__ = [
     "CouponInput",
@@ -91,8 +91,9 @@ class SelectionInput:
     odd_type_id: int
     outcome: str
     odds: Decimal
-    is_live: int = 0  # pre-match: 0, live: 1 -- oddTypeId'nin hangi katalogda aranacağı
+    is_live: int = 0  # pre-match: 0, live: 1 -- hangi katalogda aranacağı
     special_bet_value: str | None = None  # eşik/handikap, ör. "2.5" veya "0:1"
+    odd_id: int | None = None  # outcome katalogundaki tekil seçim kimliği
 
 
 @dataclass(frozen=True)
@@ -117,6 +118,7 @@ class WinningSelection:
     odd_type_id: int
     odd_type_name: str
     is_live: int
+    odd_id: int | None
     outcome: str
     odds: Decimal
     special_bet_value: str | None = None
@@ -264,6 +266,7 @@ class _Resolved:
     market_id: str
     period: str
     bound: int
+    siblings: tuple[str, ...] = ()
 
 
 def _plan_space(periods: set[str], bound: int) -> tuple[str, bool]:
@@ -318,8 +321,11 @@ def _resolve_match(
             )
             continue
 
+        siblings = tuple(OUTCOMES_BY_ODD_TYPE.get((selection.is_live, selection.odd_type_id), ()))
         try:
-            bound = required_bound(info.market.id, selection.outcome, selection.special_bet_value)
+            bound = required_bound(
+                info.market.id, selection.outcome, selection.special_bet_value, siblings
+            )
         except UnknownOutcome as exc:
             isolate(selection, f"{exc} Seçim yalıtılmış olarak değerlendirildi.")
             continue
@@ -330,6 +336,7 @@ def _resolve_match(
                 market_id=info.market.id,
                 period=info.market.period,
                 bound=bound,
+                siblings=siblings,
             )
         )
 
@@ -366,6 +373,7 @@ def _resolve_match(
                         item.selection.outcome,
                         item.selection.special_bet_value,
                         space_key,
+                        item.siblings,
                     )
                 except UnknownOutcome as exc:
                     isolate(item.selection, f"{exc} Seçim yalıtılmış olarak değerlendirildi.")
@@ -420,6 +428,7 @@ def _group_out(
                 odd_type_id=w.odd_type_id,
                 odd_type_name=resolve_odd_type(w.odd_type_id, w.is_live).name,
                 is_live=w.is_live,
+                odd_id=w.odd_id,
                 outcome=w.outcome,
                 odds=w.odds,
                 special_bet_value=w.special_bet_value,
@@ -522,19 +531,57 @@ def _resolve_system_sizes(coupon: CouponInput, combinable_count: int) -> tuple[i
 # --------------------------------------------------------------------------- #
 
 
+def _apply_odd_ids(coupon: CouponInput, warnings: list[str]) -> CouponInput:
+    """``oddId`` verilmişse oddTypeId ve outcome'u katalogdan doldurur.
+
+    Sağlayıcı outcome adlarını farklı dillerde gönderebildiği için (``Üst``,
+    ``Over``, ``Über``) tek güvenilir anahtar ``oddId``'dir. Çağıran ayrıca
+    ``oddTypeId``/``outcome`` gönderdiyse katalogdaki değer esas alınır ve
+    tutarsızlık uyarı olarak bildirilir.
+    """
+    resolved: list[SelectionInput] = []
+
+    for selection in coupon.selections:
+        if selection.odd_id is None:
+            resolved.append(selection)
+            continue
+
+        found = resolve_outcome(selection.odd_id, selection.is_live)
+        source = "live" if selection.is_live else "pre"
+        if found is None:
+            warnings.append(
+                f"oddId {selection.odd_id} ({source}) outcome katalogunda yok; "
+                "gönderilen oddTypeId ve outcome kullanıldı."
+            )
+            resolved.append(selection)
+            continue
+
+        odd_type_id, outcome = found
+        if selection.odd_type_id and selection.odd_type_id != odd_type_id:
+            warnings.append(
+                f"oddId {selection.odd_id} ({source}) katalogda oddType {odd_type_id} "
+                f"altında; gönderilen {selection.odd_type_id} yerine katalog esas alındı."
+            )
+        resolved.append(replace(selection, odd_type_id=odd_type_id, outcome=outcome))
+
+    return replace(coupon, selections=tuple(resolved))
+
+
 def calculate_max_gain(coupon: CouponInput) -> MaxGainResult:
     """Kuponun en iyi senaryodaki toplam ödemesini (max gain) hesaplar."""
+    warnings: list[str] = []
+    coupon = _apply_odd_ids(coupon, warnings)
     by_match = _validate(coupon)
     with localcontext() as ctx:
         ctx.prec = _PRECISION
-        return _calculate(coupon, by_match)
+        return _calculate(coupon, by_match, warnings)
 
 
 def _calculate(
-    coupon: CouponInput, by_match: OrderedDict[str, list[SelectionInput]]
+    coupon: CouponInput,
+    by_match: OrderedDict[str, list[SelectionInput]],
+    warnings: list[str],
 ) -> MaxGainResult:
-    warnings: list[str] = []
-
     matches = tuple(
         _resolve_match(match_id, selections, match_id in coupon.banker_match_ids, warnings)
         for match_id, selections in by_match.items()

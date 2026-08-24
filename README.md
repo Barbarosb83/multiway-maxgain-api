@@ -14,11 +14,25 @@ Kupon, düz bir **seçim listesi**dir. Her seçim şunları taşır:
 | Alan | Açıklama |
 |---|---|
 | `matchId` | Maç kimliği. Aynı maça **birden fazla** seçim gelebilir — "multiway". |
-| `isLive` | Event pre-match ise `0`, live ise `1`. `oddTypeId` bu bayrağa göre ilgili katalogda aranır. |
-| `oddTypeId` | Piyasa kimliği. Katalog: `GET /api/v1/odd-types` |
-| `outcome` | Sonuç kodu. Ör. `"1"`, `"X2"`, `"Üst"`, `"2-1"` |
+| `isLive` | Event pre-match ise `0`, live ise `1`. Kimlikler bu bayrağa göre ilgili katalogda aranır. |
+| `oddId` | **Seçimin tekil kimliği.** Verildiğinde `oddTypeId` ve `outcome` katalogdan doldurulur. |
 | `specialBetValue` | Piyasanın eşiği. Alt/Üst için `"2.5"`, handikap için `"0:1"` ya da `"-1.5"`. Gerektiren piyasalarda zorunlu. |
 | `odds` | Ondalık oran (`> 1.00`) |
+| `oddTypeId`, `outcome` | `oddId` yoksa zorunlu; varsa yok sayılır (tutarsızlık uyarı olarak bildirilir). |
+
+### Neden `oddId`
+
+Outcome adları sağlayıcıda dile göre değişebilir (`Üst`, `Over`, `Über`) ve kodlamalar
+piyasadan piyasaya farklıdır — İY/MS aynı sağlayıcıda hem `1/X`, hem `1X`, hem `HD` biçiminde
+geçiyor. `oddId` bunların hepsini tek bir tamsayıya indirger:
+
+```
+oddId 1571  ->  oddType 1565 ("3way"),          outcome "1"
+oddId 2307  ->  oddType 1481 ("Double Chance"), outcome "1X"
+oddId   80  ->  live oddType 24,                outcome "1X"
+```
+
+Servis kanonik adı katalogdan okur; gövdedeki `outcome` alanı yalnızca `oddId` yokken kullanılır.
 
 Kupon düzeyinde: `couponAmount`, isteğe bağlı `system`, `bankerMatchIds`, `bonusMultiplier`,
 `maxPayoutCap`, `currency`.
@@ -93,15 +107,35 @@ en iyiyi geçemiyorsa dal kesilir. Yanıt, seçilen alt kümeyi **ve onu gerçek
 
 ## oddType kataloğu
 
-Her iki katalog da repoda tutulur ve tamamı isimleriyle yüklenir:
+Dört katalog da repoda tutulur:
 
-| Dosya | id aralığı | Satır |
-|---|---|---|
-| [`data/odd_types_pre.csv`](data/odd_types_pre.csv) | 1456–2025 | 559 |
-| [`data/odd_types_live.csv`](data/odd_types_live.csv) | 1–867 | 867 |
+| Dosya | İçerik |
+|---|---|
+| [`data/odd_types_pre.csv`](data/odd_types_pre.csv) | 559 piyasa, id 1456–2025 |
+| [`data/odd_types_live.csv`](data/odd_types_live.csv) | 867 piyasa, id 1–867 |
+| [`data/outcomes_pre.csv`](data/outcomes_pre.csv) | `oddTypeId, oddId, outcome` |
+| [`data/outcomes_live.csv`](data/outcomes_live.csv) | `oddTypeId, oddId, outcome` |
 
-`GET /api/v1/odd-types` bunları listeler (`isLive`, `q`, `limit`, `offset` ile süzülür).
-**1426 id'nin tamamının adı bilinir; 149'unun anlamı bir piyasaya eşlenmiştir.**
+`GET /api/v1/odd-types` piyasaları listeler (`isLive`, `q`, `limit`, `offset` ile süzülür).
+**1426 piyasanın ve 8965 oddId'nin tamamı yüklenir; 158 piyasanın anlamı eşlenmiştir.**
+
+### Eşlemeler veriyle doğrulanır
+
+Bir piyasa adı eşlense bile, o piyasanın **gerçek outcome kümesi** tanımla bağdaşmıyorsa eşleme
+kabul edilmez. Yanlış bir eşleme çelişen seçimleri sessizce uyumlu gösterip max gain'i şişirir —
+sessiz yanlış, hatadan kötüdür. Bu kontrol gözle bulunamayacak üç hatayı yakaladı:
+
+| oddType | Sanılan | Gerçek outcome kümesi | Doğrusu |
+|---|---|---|---|
+| `1519 Total Goals` | Alt/Üst | `0-1 goals`, `2-3 goals`, `4-5 goals`, `6+` | aralık |
+| `1628 1st Half - Total Goals` | Alt/Üst | `0`, `1`, `2+` | tam sayı |
+| `1487 Goals Home` | Alt/Üst | `0`, `1`, `2`, `3+` | tam sayı |
+
+Doğrulanamayan iki id bilerek eşlenmemiştir (`KNOWN_UNMAPPABLE`) ve bir test listenin bundan
+ibaret kaldığını sabitler; yeni bir uyumsuzluk çıkarsa CI kırılır.
+
+`Others` / `other` / `C` gibi toplayıcı outcome'lar, kardeş outcome'ların **tümleyeni** olarak
+modellenir: `Doğru Skor 1:0` ile `Others` böylece doğru biçimde birbirini dışlar.
 
 ### Eşleme neden ad üzerinden
 
@@ -116,9 +150,11 @@ uzayla çözülür — basketbol `Üst 220.5` de futbol `Üst 2.5` de aynı kodl
 Tanımlı piyasalar ([`app/services/markets.py`](app/services/markets.py)):
 
 `MS_1X2` · `CIFT_SANS` · `DNB` · `IY_1X2` · `IY_CIFT_SANS` · `IY_DNB` · `IY2_1X2` ·
-`IY2_CIFT_SANS` · `IY2_DNB` · `ALT_UST` · `ALT_UST_EV` · `ALT_UST_DEP` · `IY_ALT_UST` ·
-`IY2_ALT_UST` · `HANDIKAP` · `IY_HANDIKAP` · `KARSILIKLI_GOL` · `DOGRU_SKOR` · `IY_MS` ·
-`TEK_CIFT` · `IY_TEK_CIFT` · `TOPLAM_GOL`
+`IY2_CIFT_SANS` · `IY2_DNB` · `ALT_UST` · `ALT_UST_3WAY` · `ALT_UST_EV` · `ALT_UST_DEP` ·
+`IY_ALT_UST` · `IY2_ALT_UST` · `HANDIKAP` · `IY_HANDIKAP` · `GOL_SAYISI` · `GOL_SAYISI_EV` ·
+`GOL_SAYISI_DEP` · `IY_GOL_SAYISI` · `IY2_GOL_SAYISI` · `IY_GOL_SAYISI_EV` ·
+`IY_GOL_SAYISI_DEP` · `KARSILIKLI_GOL` · `DOGRU_SKOR` · `IY_MS` · `TEK_CIFT` · `IY_TEK_CIFT` ·
+`TOPLAM_GOL`
 
 > Asya handikabında `0` ve çeyrek çizgilerde iade/yarım kazanç vardır; burada kazanır/kazanmaz
 > olarak ele alınır. Bu, max gain'i düşürebilir ama asla şişirmez.
@@ -197,12 +233,11 @@ curl -s -X POST http://127.0.0.1:8000/api/v1/coupons/max-gain \
     "system": { "sizes": [2] },
     "bankerMatchIds": [900],
     "selections": [
-      { "matchId": 900, "isLive": 0, "oddTypeId": 1565, "outcome": "1",  "odds": "1.50" },
-      { "matchId": 901, "isLive": 0, "oddTypeId": 1565, "outcome": "1",  "odds": "2.00" },
-      { "matchId": 901, "isLive": 0, "oddTypeId": 1481, "outcome": "1X", "odds": "1.30" },
-      { "matchId": 902, "isLive": 0, "oddTypeId": 1500, "outcome": "Üst",
-        "specialBetValue": "2.5", "odds": "4.00" },
-      { "matchId": 903, "isLive": 0, "oddTypeId": 1565, "outcome": "1",  "odds": "1.80" }
+      { "matchId": 900, "isLive": 0, "oddId": 1571, "odds": "1.50" },
+      { "matchId": 901, "isLive": 0, "oddId": 1571, "odds": "2.00" },
+      { "matchId": 901, "isLive": 0, "oddId": 2307, "odds": "1.30" },
+      { "matchId": 902, "isLive": 0, "oddId": 1541, "specialBetValue": "2.5", "odds": "4.00" },
+      { "matchId": 903, "isLive": 0, "oddId": 1571, "odds": "1.80" }
     ]
   }'
 ```
@@ -230,9 +265,9 @@ curl -s -X POST http://127.0.0.1:8000/api/v1/coupons/max-gain \
           "oddsSum": "3.30",
           "combined": true,
           "winningSelections": [
-            { "oddTypeId": 1565, "oddTypeName": "3way", "isLive": 0,
+            { "oddId": 1571, "oddTypeId": 1565, "oddTypeName": "3way", "isLive": 0,
               "outcome": "1",  "odds": "2.00", "specialBetValue": null },
-            { "oddTypeId": 1481, "oddTypeName": "Double Chance", "isLive": 0,
+            { "oddId": 2307, "oddTypeId": 1481, "oddTypeName": "Double Chance", "isLive": 0,
               "outcome": "1X", "odds": "1.30", "specialBetValue": null }
           ],
           "scoreline": { "halfTime": null, "fullTime": "1-0" }
@@ -260,8 +295,9 @@ Beş satırın üçü en iyi senaryoda birlikte kazanır:
 | `selections[]` | dizi | ✅ | En az 1 seçim; en fazla 50 maç, maç başına 12 seçim |
 | `selections[].matchId` | int \| string | ✅ | Yanıtta gönderilen tiple aynen döner |
 | `selections[].isLive` | `0` \| `1` | — | Varsayılan `0` (pre-match) |
-| `selections[].oddTypeId` | int | ✅ | Eşlenmemişse geri düşüş + uyarı |
-| `selections[].outcome` | string | ✅ | Piyasaya göre çözümlenir |
+| `selections[].oddId` | int | ◐ | Verilirse `oddTypeId`/`outcome` katalogdan doldurulur |
+| `selections[].oddTypeId` | int | ◐ | `oddId` yoksa zorunlu |
+| `selections[].outcome` | string | ◐ | `oddId` yoksa zorunlu |
 | `selections[].specialBetValue` | string | — | Gerektiren piyasalarda zorunlu (`needsSpecialBetValue`) |
 | `selections[].odds` | decimal | ✅ | `> 1.00` |
 | `couponAmount` | decimal | ✅ | `> 0` |
@@ -272,7 +308,8 @@ Beş satırın üçü en iyi senaryoda birlikte kazanır:
 | `maxPayoutCap` | decimal | — | Aşılırsa ödeme kırpılır, `capped: true` |
 | `currency` | ISO-4217 | — | Varsayılan `TRY` |
 
-Aynı `(matchId, isLive, oddTypeId, outcome, specialBetValue)` beşlisi iki kez gönderilemez — ama
+Her seçim ya `oddId` ile ya da `oddTypeId` + `outcome` ile tanımlanmalıdır.
+Aynı `(matchId, isLive, oddId, oddTypeId, outcome, specialBetValue)` altılısı iki kez gönderilemez — ama
 `Üst 0.5` ile `Üst 2.5` farklı seçimlerdir ve birlikte oynanabilir. Geçersiz kuponlar `422` ile ve
 açıklayıcı bir `detail` mesajıyla reddedilir.
 

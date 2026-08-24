@@ -300,6 +300,26 @@ def _total(period: str, side: str = "both") -> tuple[Builder, Bounder]:
     return build, bound
 
 
+def _total_3way(period: str) -> tuple[Builder, Bounder]:
+    """Alt / Tam / Üst. 'X' toplamın eşiğe tam eşit olması demektir."""
+    score = _PERIODS[period]
+
+    def build(outcome: str, special: str | None) -> Predicate:
+        if _norm(outcome).replace(" ", "") == "X":
+            _direction, line = _line_from("Over", special, "Alt/Üst")
+            return lambda a: sum(score(a)) == line
+        direction, line = _line_from(outcome, special, "Alt/Üst")
+        if direction == "OVER":
+            return lambda a: sum(score(a)) > line
+        return lambda a: sum(score(a)) < line
+
+    def bound(outcome: str, special: str | None) -> int:
+        _direction, line = _line_from("Over", special, "Alt/Üst")
+        return math.ceil(line) + 1
+
+    return build, bound
+
+
 def _handicap(period: str) -> tuple[Builder, Bounder]:
     score = _PERIODS[period]
 
@@ -322,6 +342,52 @@ def _handicap(period: str) -> tuple[Builder, Bounder]:
     return build, bound
 
 
+_COUNT_RE = re.compile(r"^(?P<low>\d+)\s*(?:-\s*(?P<high>\d+)|(?P<plus>\+))?$")
+
+
+def _parse_count(outcome: str, special: str | None) -> tuple[int, int | None]:
+    """'0' -> (0,0); '3+' -> (3,None); '0-1 goals' -> (0,1).
+
+    Sondaki birim sözcüğü (goals, sets, points ...) atılır.
+    """
+    source = _norm(outcome) or _norm(special)
+    source = re.sub(r"[A-ZÇĞİÖŞÜ]+\s*$", "", source).strip()
+    match = _COUNT_RE.match(source.replace(" ", ""))
+    if not match:
+        raise UnknownOutcome(f"Sayı outcome'u çözümlenemedi: {outcome!r} ('0', '3+', '0-1')")
+    low = int(match.group("low"))
+    if match.group("plus"):
+        return low, None
+    if match.group("high"):
+        return low, int(match.group("high"))
+    return low, low
+
+
+def _count(period: str, side: str = "both") -> tuple[Builder, Bounder]:
+    """Tam sayı / aralık piyasası -- Over/Under değil, doğrudan adet."""
+    score = _PERIODS[period]
+
+    def value(atom: Atom) -> int:
+        home, away = score(atom)
+        if side == "home":
+            return home
+        if side == "away":
+            return away
+        return home + away
+
+    def build(outcome: str, special: str | None) -> Predicate:
+        low, high = _parse_count(outcome, special)
+        if high is None:
+            return lambda a: value(a) >= low
+        return lambda a: low <= value(a) <= high
+
+    def bound(outcome: str, special: str | None) -> int:
+        low, high = _parse_count(outcome, special)
+        return (high if high is not None else low) + 1
+
+    return build, bound
+
+
 def _both_teams_to_score(outcome: str, _special: str | None) -> Predicate:
     code = _norm(outcome).replace(" ", "")
     if code in {"VAR", "YES", "EVET", "KGVAR", "GOAL", "1"}:
@@ -332,6 +398,8 @@ def _both_teams_to_score(outcome: str, _special: str | None) -> Predicate:
 
 
 def _correct_score(outcome: str, special: str | None) -> Predicate:
+    # "Others" / "other" / "C" toplayıcı kodlardır: tek bir skora karşılık
+    # gelmedikleri için modellenemez ve seçim yalıtılır.
     match = _SCORE_RE.match(_norm(outcome)) or _SCORE_RE.match(_norm(special))
     if not match:
         raise UnknownOutcome(f"Doğru skor outcome'u geçersiz: {outcome!r} ('2-1' bekleniyor)")
@@ -346,8 +414,18 @@ def _correct_score_bound(outcome: str, special: str | None) -> int:
     return max(int(match.group(1)), int(match.group(2))) + 1
 
 
+_HTFT_LETTERS = {"H": "1", "D": "X", "A": "2"}
+
+
 def _half_time_full_time(outcome: str, _special: str | None) -> Predicate:
-    parts = _norm(outcome).replace(" ", "").split("/")
+    """'1/X', '1X' ve 'HD' kodlamalarını kabul eder (sağlayıcı üçünü de kullanıyor)."""
+    code = _norm(outcome).replace(" ", "")
+    if "/" in code:
+        parts = code.split("/")
+    elif len(code) == 2:
+        parts = [_HTFT_LETTERS.get(char, char) for char in code]
+    else:
+        parts = [code]
     if len(parts) != 2:
         raise UnknownOutcome(f"İY/MS outcome'u geçersiz: {outcome!r} ('1/X' bekleniyor)")
     first = _match_result("HT")(parts[0], None)
@@ -464,6 +542,14 @@ MARKETS: dict[str, MarketDef] = {
             "IY2_ALT_UST", "İkinci Yarı Alt / Üst", "2H", _total("2H"), ("Alt",), needs_special=True
         ),
         # Handikap -- specialBetValue "0:1" ya da "-1.5"
+        _market(
+            "ALT_UST_3WAY",
+            "Alt / Tam / Üst",
+            "FT",
+            _total_3way("FT"),
+            ("Over", "X", "Under"),
+            needs_special=True,
+        ),
         _market("HANDIKAP", "Handikap", "FT", _handicap("FT"), ("1", "X", "2"), needs_special=True),
         _market(
             "IY_HANDIKAP",
@@ -486,6 +572,22 @@ MARKETS: dict[str, MarketDef] = {
         _market("IY_MS", "İlk Yarı / Maç Sonucu", "FT", _half_time_full_time, ("1/1", "X/2")),
         _market("TEK_CIFT", "Tek / Çift", "FT", _odd_even("FT"), ("Tek", "Çift")),
         _market("IY_TEK_CIFT", "İlk Yarı Tek / Çift", "HT", _odd_even("HT"), ("Tek", "Çift")),
+        # Adet / aralık piyasaları -- Over/Under değil, doğrudan sayı
+        _market("GOL_SAYISI", "Gol Sayısı", "FT", _count("FT"), ("0", "2-3", "6+")),
+        _market("IY_GOL_SAYISI", "İlk Yarı Gol Sayısı", "HT", _count("HT"), ("0", "1", "2+")),
+        _market("IY2_GOL_SAYISI", "İkinci Yarı Gol Sayısı", "2H", _count("2H"), ("0", "1", "2+")),
+        _market("GOL_SAYISI_EV", "Ev Gol Sayısı", "FT", _count("FT", "home"), ("0", "3+")),
+        _market("GOL_SAYISI_DEP", "Deplasman Gol Sayısı", "FT", _count("FT", "away"), ("0", "3+")),
+        _market(
+            "IY_GOL_SAYISI_EV", "İlk Yarı Ev Gol Sayısı", "HT", _count("HT", "home"), ("0", "3+")
+        ),
+        _market(
+            "IY_GOL_SAYISI_DEP",
+            "İlk Yarı Deplasman Gol Sayısı",
+            "HT",
+            _count("HT", "away"),
+            ("0", "3+"),
+        ),
         _market(
             "TOPLAM_GOL",
             "Toplam Gol Aralığı",
@@ -503,14 +605,41 @@ MARKETS: dict[str, MarketDef] = {
 # --------------------------------------------------------------------------- #
 
 
-def required_bound(market_id: str, outcome: str, special: str | None) -> int:
-    """Seçimin doğru değerlendirilebilmesi için gereken skor tavanı."""
+def required_bound(
+    market_id: str, outcome: str, special: str | None, siblings: tuple[str, ...] = ()
+) -> int:
+    """Seçimin doğru değerlendirilebilmesi için gereken skor tavanı.
+
+    Toplayıcı outcome'lar ("Others") kardeşlerinin tümleyenidir; dolayısıyla
+    kardeşlerin tamamını kapsayacak bir tavan gerekir.
+    """
     market = MARKETS[market_id]
-    return max(MIN_SCORE_BOUND, min(market.bound(outcome, special), MAX_SCORE_BOUND))
+    if is_aggregate(outcome):
+        bounds = [
+            market.bound(sibling, special) for sibling in siblings if not is_aggregate(sibling)
+        ]
+        needed = max(bounds) if bounds else MIN_SCORE_BOUND
+    else:
+        needed = market.bound(outcome, special)
+    return max(MIN_SCORE_BOUND, min(needed, MAX_SCORE_BOUND))
+
+
+AGGREGATE_OUTCOMES = {"OTHERS", "OTHER", "C"}
+
+
+def is_aggregate(outcome: str) -> bool:
+    """'Others' / 'other' / 'C' gibi toplayıcı kodlar tek bir sonuca karşılık gelmez."""
+    return _norm(outcome).replace(" ", "") in AGGREGATE_OUTCOMES
 
 
 @lru_cache(maxsize=8192)
-def mask_for(market_id: str, outcome: str, special: str | None, space_key: tuple[str, int]) -> int:
+def mask_for(
+    market_id: str,
+    outcome: str,
+    special: str | None,
+    space_key: tuple[str, int],
+    siblings: tuple[str, ...] = (),
+) -> int:
     """(piyasa, outcome, specialBetValue) ikilisinin kazandığı atomların bit maskesi.
 
     Maske bytearray üzerinden kurulur: her atom için tek bir bit yazılır ve
@@ -519,6 +648,16 @@ def mask_for(market_id: str, outcome: str, special: str | None, space_key: tuple
     karesel yavaşlar.
     """
     space = get_space(*space_key)
+
+    if is_aggregate(outcome):
+        # "Others" = listelenen diğer sonuçların hiçbiri. Kardeş outcome'ların
+        # birleşiminin tümleyeni tam olarak bunu verir.
+        covered = 0
+        for sibling in siblings:
+            if not is_aggregate(sibling):
+                covered |= mask_for(market_id, sibling, special, space_key)
+        return space.full_mask & ~covered
+
     predicate = MARKETS[market_id].build(outcome, special)
 
     buffer = bytearray((len(space.atoms) + 7) // 8)

@@ -38,8 +38,9 @@ def _to_domain(payload: CouponIn) -> tuple[CouponInput, dict[str, str | int]]:
         selections.append(
             SelectionInput(
                 match_id=key,
-                odd_type_id=selection.odd_type_id,
-                outcome=selection.outcome.strip(),
+                odd_id=selection.odd_id,
+                odd_type_id=selection.odd_type_id or 0,
+                outcome=(selection.outcome or "").strip(),
                 odds=selection.odds,
                 is_live=selection.is_live,
                 special_bet_value=(

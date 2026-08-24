@@ -41,9 +41,17 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.services.markets import MARKETS, MarketDef
+from app.services.markets import MARKETS, MarketDef, UnknownOutcome, is_aggregate
 
-__all__ = ["OddTypeInfo", "resolve_odd_type", "catalog", "catalog_size", "ODD_TYPE_MARKET"]
+__all__ = [
+    "OddTypeInfo",
+    "resolve_odd_type",
+    "resolve_outcome",
+    "catalog",
+    "catalog_size",
+    "ODD_TYPE_MARKET",
+    "REJECTED_MAPPINGS",
+]
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SOURCES = {0: _DATA_DIR / "odd_types_pre.csv", 1: _DATA_DIR / "odd_types_live.csv"}
@@ -72,7 +80,7 @@ _NAME_TO_MARKET: dict[str, str] = {
     "3 way": "MS_1X2",
     "1x2": "MS_1X2",
     "3way aams": "MS_1X2",
-    "total 3way": "MS_1X2",
+    "total 3way": "ALT_UST_3WAY",
     "double chance": "CIFT_SANS",
     "double chance (all)": "CIFT_SANS",
     "double chance (1x - 12 - x2)": "CIFT_SANS",
@@ -100,29 +108,29 @@ _NAME_TO_MARKET: dict[str, str] = {
     "total": "ALT_UST",
     "totals": "ALT_UST",
     "asian total": "ALT_UST",
-    "total goals": "ALT_UST",
+    "total goals": "GOL_SAYISI",
     "total aams": "ALT_UST",
-    "total goals aams": "ALT_UST",
+    "total goals aams": "GOL_SAYISI",
     "1st half - over/under": "IY_ALT_UST",
     "1st half - total": "IY_ALT_UST",
     "1st half - totals": "IY_ALT_UST",
     "1st half - asian total": "IY_ALT_UST",
-    "1st half - total goals": "IY_ALT_UST",
+    "1st half - total goals": "IY_GOL_SAYISI",
     "2nd half - total": "IY2_ALT_UST",
     "2nd half - totals": "IY2_ALT_UST",
     "2nd half - asian total": "IY2_ALT_UST",
-    "2nd half - total goals": "IY2_ALT_UST",
+    "2nd half - total goals": "IY2_GOL_SAYISI",
     # --- Takım bazlı alt / üst ---
     "totals home": "ALT_UST_EV",
     "totals home team": "ALT_UST_EV",
     "total hometeam": "ALT_UST_EV",
-    "goals home": "ALT_UST_EV",
-    "goals home team": "ALT_UST_EV",
+    "goals home": "GOL_SAYISI_EV",
+    "goals home team": "GOL_SAYISI_EV",
     "totals away": "ALT_UST_DEP",
     "totals away team": "ALT_UST_DEP",
     "total awayteam": "ALT_UST_DEP",
-    "goals away": "ALT_UST_DEP",
-    "goals away team": "ALT_UST_DEP",
+    "goals away": "GOL_SAYISI_DEP",
+    "goals away team": "GOL_SAYISI_DEP",
     # --- Handikap ---
     # Asya handikabında 0 ve çeyrek çizgilerde iade/yarım kazanç vardır; burada
     # kazanır/kazanmaz olarak ele alınır. Bu, max gain'i düşürebilir ama asla
@@ -146,7 +154,17 @@ _NAME_TO_MARKET: dict[str, str] = {
     "1st half - odd/even goals": "IY_TEK_CIFT",
     "1st half - odd / even": "IY_TEK_CIFT",
     "odd/even for first half": "IY_TEK_CIFT",
-    "multigoals": "TOPLAM_GOL",
+    "multigoals": "GOL_SAYISI",
+    "1st half - multigoals": "IY_GOL_SAYISI",
+    "2nd half - multigoals": "IY2_GOL_SAYISI",
+    "multigoals hometeam": "GOL_SAYISI_EV",
+    "multigoals awayteam": "GOL_SAYISI_DEP",
+    "total goals (exact)": "GOL_SAYISI",
+    "exact number of goals": "GOL_SAYISI",
+    "1st half - exact number of goals": "IY_GOL_SAYISI",
+    "goals home team for [periodnr!] period": "GOL_SAYISI_EV",
+    "1st half - goals hometeam": "IY_GOL_SAYISI_EV",
+    "1st half - goals awayteam": "IY_GOL_SAYISI_DEP",
     # --- Doğru skor ve İY/MS ---
     "correct score": "DOGRU_SKOR",
     "correctscore": "DOGRU_SKOR",
@@ -157,28 +175,106 @@ _NAME_TO_MARKET: dict[str, str] = {
 }
 
 
-def _load() -> tuple[dict[tuple[int, int], str], dict[tuple[int, int], str]]:
-    """CSV'lerden (isLive, id) -> ad ve (isLive, id) -> piyasa tablolarını kurar."""
+_OUTCOME_SOURCES = {0: _DATA_DIR / "outcomes_pre.csv", 1: _DATA_DIR / "outcomes_live.csv"}
+
+
+def _read_rows(path: Path) -> list[list[str]]:
+    with path.open(encoding="utf-8-sig", newline="") as handle:
+        return [row for row in csv.reader(handle) if row and row[0].strip().isdigit()]
+
+
+def _load_names() -> dict[tuple[int, int], str]:
     names: dict[tuple[int, int], str] = {}
-    markets: dict[tuple[int, int], str] = {}
-
     for is_live, path in _SOURCES.items():
-        with path.open(encoding="utf-8-sig", newline="") as handle:
-            for row in csv.reader(handle):
-                if len(row) < 2 or not row[0].strip().isdigit():
-                    continue
-                odd_type_id = int(row[0])
-                name = ",".join(row[1:]).strip()
-                key = (is_live, odd_type_id)
-                names[key] = name
-                market_id = _NAME_TO_MARKET.get(_normalize(name))
-                if market_id:
-                    markets[key] = market_id
-
-    return names, markets
+        for row in _read_rows(path):
+            if len(row) >= 2:
+                names[(is_live, int(row[0]))] = ",".join(row[1:]).strip()
+    return names
 
 
-ODD_TYPE_NAME, ODD_TYPE_MARKET = _load()
+def _load_outcomes() -> tuple[
+    dict[tuple[int, int], tuple[int, str]], dict[tuple[int, int], list[str]]
+]:
+    """oddId -> (oddTypeId, outcome adı) ve oddTypeId -> outcome adları."""
+    by_odd_id: dict[tuple[int, int], tuple[int, str]] = {}
+    by_odd_type: dict[tuple[int, int], list[str]] = {}
+    for is_live, path in _OUTCOME_SOURCES.items():
+        for row in _read_rows(path):
+            if len(row) < 3 or not row[1].strip().isdigit():
+                continue
+            odd_type_id, odd_id = int(row[0]), int(row[1])
+            outcome = ",".join(row[2:]).strip()
+            by_odd_id[(is_live, odd_id)] = (odd_type_id, outcome)
+            by_odd_type.setdefault((is_live, odd_type_id), []).append(outcome)
+    return by_odd_id, by_odd_type
+
+
+ODD_TYPE_NAME = _load_names()
+OUTCOME_BY_ODD_ID, OUTCOMES_BY_ODD_TYPE = _load_outcomes()
+
+
+def _sample_special(market: MarketDef) -> str | None:
+    """Doğrulama için temsilî specialBetValue."""
+    if not market.needs_special:
+        return None
+    return "0:1" if "HANDIKAP" in market.id else "2.5"
+
+
+def _build_market_map() -> tuple[dict[tuple[int, int], str], list[tuple[int, int, str, str]]]:
+    """Ad tablosunu uygular ve her eşlemeyi gerçek outcome kümesiyle doğrular.
+
+    Bir oddType'ın outcome'larından herhangi biri piyasa tanımıyla
+    çözümlenemiyorsa eşleme kabul edilmez: yanlış bir eşleme, çelişen
+    seçimleri sessizce uyumlu gösterip max gain'i şişirebilir. Reddedilenler
+    ``REJECTED_MAPPINGS`` içinde görünür ve testle raporlanır.
+    """
+    markets: dict[tuple[int, int], str] = {}
+    rejected: list[tuple[int, int, str, str]] = []
+
+    for key, name in ODD_TYPE_NAME.items():
+        market_id = _NAME_TO_MARKET.get(_normalize(name))
+        if market_id is None:
+            continue
+
+        market = MARKETS[market_id]
+        special = _sample_special(market)
+        problem = ""
+        for outcome in OUTCOMES_BY_ODD_TYPE.get(key, []):
+            if is_aggregate(outcome):
+                continue  # tümleyen olarak çözülür, piyasa yüklemi gerekmez
+            try:
+                market.build(outcome, special)
+            except UnknownOutcome as exc:
+                problem = str(exc)
+                break
+
+        if problem:
+            rejected.append((key[0], key[1], name, problem))
+        else:
+            markets[key] = market_id
+
+    return markets, rejected
+
+
+ODD_TYPE_MARKET, REJECTED_MAPPINGS = _build_market_map()
+
+# Adı bir piyasaya işaret ettiği hâlde outcome kümesi o piyasayla bağdaşmayan,
+# bilerek eşlenmemiş id'ler. Doğrulama bunları zaten reddeder; burada gerekçesi
+# kayda geçer ve test, listenin bundan ibaret kaldığını doğrular.
+KNOWN_UNMAPPABLE: dict[tuple[int, int], str] = {
+    (0, 1875): (
+        "Outcome'lar kesirli set skorları ('0.5:1.5'); gol skoru değil, set/leg handikabı."
+    ),
+    (1, 19): (
+        "Outcome kümesi '1, 2, o, u' -- '1' ve '2'nin Üst/Alt karşılığı "
+        "belgelenmemiş, tahmin edilirse yön ters çevrilebilir."
+    ),
+}
+
+
+def resolve_outcome(odd_id: int, is_live: int = 0) -> tuple[int, str] | None:
+    """oddId -> (oddTypeId, outcome adı). Bilinmiyorsa None."""
+    return OUTCOME_BY_ODD_ID.get((is_live, odd_id))
 
 
 @dataclass(frozen=True)

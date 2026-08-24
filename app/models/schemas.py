@@ -34,9 +34,19 @@ class StrictBase(Base):
 
 class SelectionIn(StrictBase):
     match_id: MatchId = Field(description="Maç kimliği; aynı maça birden fazla seçim gelebilir")
-    odd_type_id: int = Field(ge=0, description="Piyasa kimliği; katalog için GET /api/v1/odd-types")
-    outcome: str = Field(
-        min_length=1, max_length=64, description="Sonuç kodu, ör. '1', 'X2', 'Üst', '2-1'"
+    odd_id: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Outcome katalogundaki tekil seçim kimliği. Verildiğinde oddTypeId ve "
+            "outcome katalogdan doldurulur; outcome adının dili önemsizleşir."
+        ),
+    )
+    odd_type_id: int | None = Field(
+        default=None, ge=0, description="Piyasa kimliği; oddId verildiyse gerekmez"
+    )
+    outcome: str | None = Field(
+        default=None, max_length=64, description="Sonuç kodu; oddId verildiyse gerekmez"
     )
     odds: Odds = Field(description="Ondalık oran; 1.00'den büyük olmalı")
     is_live: int = Field(
@@ -140,22 +150,36 @@ class CouponIn(StrictBase):
     currency: str = Field(default="TRY", min_length=3, max_length=3, pattern=r"^[A-Za-z]{3}$")
 
     @model_validator(mode="after")
+    def _check_selection_identity(self) -> CouponIn:
+        """Her seçim ya oddId ile ya da oddTypeId + outcome ile tanımlanmalı."""
+        for index, selection in enumerate(self.selections):
+            if selection.odd_id is None and (
+                selection.odd_type_id is None or not (selection.outcome or "").strip()
+            ):
+                raise ValueError(
+                    f"selections[{index}]: oddId verilmediğinde oddTypeId ve outcome zorunludur."
+                )
+        return self
+
+    @model_validator(mode="after")
     def _check_selections_unique(self) -> CouponIn:
-        seen: set[tuple[str, int, int, str, str]] = set()
+        seen: set[tuple[str, int, int | None, int | None, str, str]] = set()
         for selection in self.selections:
             # specialBetValue anahtarın parçasıdır: "Üst 0.5" ile "Üst 2.5" aynı
             # piyasanın farklı çizgileridir ve birlikte oynanabilir.
             key = (
                 str(selection.match_id),
                 selection.is_live,
+                selection.odd_id,
                 selection.odd_type_id,
-                selection.outcome.strip().upper(),
+                (selection.outcome or "").strip().upper(),
                 (selection.special_bet_value or "").strip().upper(),
             )
             if key in seen:
                 raise ValueError(
                     f"Aynı seçim iki kez gönderildi: maç {selection.match_id}, "
-                    f"oddType {selection.odd_type_id}, outcome {selection.outcome!r}, "
+                    f"oddId {selection.odd_id}, oddType {selection.odd_type_id}, "
+                    f"outcome {selection.outcome!r}, "
                     f"specialBetValue {selection.special_bet_value!r}."
                 )
             seen.add(key)
@@ -184,6 +208,7 @@ class ScorelineOut(Base):
 
 
 class WinningSelectionOut(Base):
+    odd_id: int | None = None
     odd_type_id: int
     odd_type_name: str
     is_live: int
