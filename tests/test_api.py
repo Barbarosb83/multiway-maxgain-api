@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -454,3 +456,35 @@ def test_selection_without_odd_id_requires_odd_type_and_outcome():
     response = client.post("/api/v1/coupons/max-gain", json=payload)
     assert response.status_code == 422
     assert "oddId verilmediğinde" in response.text
+
+
+def test_every_swagger_example_is_a_valid_coupon():
+    """Dökümandaki hazır gövdeler çalışır durumda kalmalı.
+
+    Swagger'daki örnekler elle yazıldığı için şema değiştiğinde sessizce
+    bozulabilir; burada hepsi gerçekten hesaplatılır.
+    """
+    schema = client.get("/openapi.json").json()
+    examples = schema["paths"]["/api/v1/coupons/max-gain"]["post"]["requestBody"]["content"][
+        "application/json"
+    ]["examples"]
+    assert set(examples) == {"multiway", "canli", "sistem-banko"}
+
+    for name, example in examples.items():
+        response = client.post("/api/v1/coupons/max-gain", json=example["value"])
+        assert response.status_code == 200, f"{name}: {response.text}"
+        body = response.json()
+        assert body["warnings"] == [], f"{name} uyarı üretti: {body['warnings']}"
+        assert Decimal(body["maxGain"]) > 0
+
+
+def test_live_example_carries_the_current_score():
+    """Canlı örnek, skorun nereye yazıldığını göstermeli."""
+    schema = client.get("/openapi.json").json()
+    live = schema["paths"]["/api/v1/coupons/max-gain"]["post"]["requestBody"]["content"][
+        "application/json"
+    ]["examples"]["canli"]["value"]
+
+    assert all(selection["isLive"] == 1 for selection in live["selections"])
+    assert all("currentScore" in selection for selection in live["selections"])
+    assert {s["currentScore"] for s in live["selections"]} == {"0:0", "0:2"}

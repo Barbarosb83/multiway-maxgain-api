@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query
 from pydantic.alias_generators import to_camel
 
 from app.core.config import settings
@@ -17,6 +17,142 @@ from app.services.max_gain import (
     calculate_max_gain,
 )
 from app.services.odd_types import catalog, catalog_size
+
+# Swagger'da açılır listede görünen hazır gövdeler. Üçü de gerçek kupon
+# yapılarından alınmıştır.
+COUPON_EXAMPLES = {
+    "multiway": {
+        "summary": "Multiway (pre-match)",
+        "description": (
+            "Üç maç, her birinde iki seçim. Konyaspor maçında maç sonucu '1' ile "
+            "çift şans 'X2' çelişir, düşük oranlı olan elenir."
+        ),
+        "value": {
+            "couponAmount": "100.00",
+            "selections": [
+                {
+                    "matchId": 72723168,
+                    "isLive": 0,
+                    "oddTypeId": 1839,
+                    "outcome": "1",
+                    "odds": "2.15",
+                    "currentScore": "0:0",
+                },
+                {
+                    "matchId": 72723168,
+                    "isLive": 0,
+                    "oddTypeId": 1467,
+                    "outcome": "N",
+                    "odds": "2.05",
+                    "currentScore": "0:0",
+                },
+                {
+                    "matchId": 72723170,
+                    "isLive": 0,
+                    "oddTypeId": 1839,
+                    "outcome": "1",
+                    "odds": "2.00",
+                    "currentScore": "0:0",
+                },
+                {
+                    "matchId": 72723170,
+                    "isLive": 0,
+                    "oddTypeId": 1481,
+                    "outcome": "X2",
+                    "odds": "1.70",
+                    "currentScore": "0:0",
+                },
+                {
+                    "matchId": 72723172,
+                    "isLive": 0,
+                    "oddTypeId": 1513,
+                    "outcome": "1",
+                    "specialBetValue": "(0:1)",
+                    "odds": "1.85",
+                    "currentScore": "0:0",
+                },
+                {
+                    "matchId": 72723172,
+                    "isLive": 0,
+                    "oddTypeId": 1899,
+                    "outcome": "1X/Y",
+                    "odds": "2.10",
+                    "currentScore": "0:0",
+                },
+            ],
+        },
+    },
+    "canli": {
+        "summary": "Canlı kupon (anlık skorlu)",
+        "description": (
+            "isLive=1 ve her seçimde currentScore. Jong Utrecht 0:2 geride olduğu "
+            "için ev galibiyeti 3+ gol gerektirir ve '3.5 Alt' ile çelişir. "
+            "Anlık skor temelli piyasalarda (sıradaki gol, maçın kalanı) skor "
+            "ayrıca specialBetValue'da da gelir."
+        ),
+        "value": {
+            "couponAmount": "100.00",
+            "selections": [
+                {
+                    "matchId": -13996108,
+                    "isLive": 1,
+                    "oddTypeId": 3,
+                    "outcome": "1",
+                    "specialBetValue": "0:0",
+                    "odds": "2.05",
+                    "currentScore": "0:0",
+                },
+                {
+                    "matchId": -13996108,
+                    "isLive": 1,
+                    "oddTypeId": 11,
+                    "outcome": "2",
+                    "specialBetValue": "0:0",
+                    "odds": "2.45",
+                    "currentScore": "0:0",
+                },
+                {
+                    "matchId": -13996109,
+                    "isLive": 1,
+                    "oddTypeId": 710,
+                    "outcome": "Under",
+                    "specialBetValue": "3.5",
+                    "odds": "2.70",
+                    "currentScore": "0:2",
+                },
+                {
+                    "matchId": -13996109,
+                    "isLive": 1,
+                    "oddTypeId": 708,
+                    "outcome": "1",
+                    "odds": "30.00",
+                    "currentScore": "0:2",
+                },
+            ],
+        },
+    },
+    "sistem-banko": {
+        "summary": "Sistem + banko",
+        "description": (
+            "Dört maç, biri banko. 72723172 her satırda yer alır; sistem kalan üç "
+            "maça uygulanır. Seçimler yalnızca oddId ile tanımlanmış -- oddTypeId "
+            "ve outcome katalogdan doldurulur."
+        ),
+        "value": {
+            "couponAmount": "100.00",
+            "system": {"sizes": [2, 3]},
+            "bankerMatchIds": [72723172],
+            "selections": [
+                {"matchId": 72723168, "isLive": 0, "oddId": 1970, "odds": "2.15"},
+                {"matchId": 72723170, "isLive": 0, "oddId": 1970, "odds": "2.00"},
+                {"matchId": 72723174, "isLive": 0, "oddId": 1972, "odds": "3.40"},
+                {"matchId": 72723172, "isLive": 0, "oddId": 1970, "odds": "1.85"},
+                {"matchId": 72723172, "isLive": 0, "oddId": 2294, "odds": "1.60"},
+            ],
+        },
+    },
+}
+
 
 router = APIRouter()
 
@@ -122,7 +258,9 @@ def _compute(payload: CouponIn) -> MaxGainOut:
     summary="Tek bir kuponun max gain'ini hesapla",
     responses={422: {"model": ErrorOut, "description": "Kupon yapısı geçersiz"}},
 )
-def compute_max_gain(payload: CouponIn) -> MaxGainOut:
+def compute_max_gain(
+    payload: Annotated[CouponIn, Body(openapi_examples=COUPON_EXAMPLES)],
+) -> MaxGainOut:
     """Multiway ve/veya sistem kuponunun en iyi senaryodaki toplam ödemesini döner."""
     return _compute(payload)
 
