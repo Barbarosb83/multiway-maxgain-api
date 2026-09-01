@@ -44,6 +44,7 @@ from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal, localcontext
 
 from app.services.markets import (
     HALF_PERIODS,
+    MARKETS,
     MAX_SCORE_BOUND,
     UnknownOutcome,
     describe_atom,
@@ -359,6 +360,23 @@ def _resolve_match(
         isolated.setdefault(key, []).append(selection)
         warnings.append(f"Maç {match_id}: {reason}")
 
+    def unresolvable(selection: SelectionInput, market_id: str, problem: str) -> None:
+        """Çözümlenemeyen seçimi ya reddeder ya da yalıtır.
+
+        Eşik gerektiren bir piyasada (Alt/Üst, handikap, anlık skor temelli
+        piyasalar) eşik çözümlenemiyorsa bu bir istek hatasıdır ve reddedilir.
+        Yalıtmak seçimi koşulsuz toplanır hâle getirir, yani max gain'i sessizce
+        şişirir -- eksik veriyi geçerli bir sonuç gibi göstermek yerine açıkça
+        bildirmek gerekir.
+        """
+        if MARKETS[market_id].needs_special:
+            raise CouponError(
+                f"Maç {match_id} / oddType {selection.odd_type_id}: {problem} "
+                f"Bu piyasa specialBetValue gerektirir (eşik, handikap ya da anlık skor); "
+                f"canlı maçlarda currentScore da doldurabilir."
+            )
+        isolate(selection, f"{problem} Seçim yalıtılmış olarak değerlendirildi.")
+
     for selection in selections:
         info = resolve_odd_type(selection.odd_type_id, selection.is_live)
         source = "live" if selection.is_live else "pre"
@@ -394,7 +412,7 @@ def _resolve_match(
         try:
             bound = required_bound(info.market.id, selection.outcome, special, siblings)
         except UnknownOutcome as exc:
-            isolate(selection, f"{exc} Seçim yalıtılmış olarak değerlendirildi.")
+            unresolvable(selection, info.market.id, str(exc))
             continue
 
         resolved.append(
@@ -462,7 +480,7 @@ def _resolve_match(
                         item.siblings,
                     )
                 except UnknownOutcome as exc:
-                    isolate(item.selection, f"{exc} Seçim yalıtılmış olarak değerlendirildi.")
+                    unresolvable(item.selection, item.market_id, str(exc))
                     continue
                 if mask and not (mask & allowed):
                     warnings.append(

@@ -498,8 +498,12 @@ def test_half_time_total_lines_resolve_through_odd_ids():
     assert contradictory.matches[0].weight == Decimal("2.00")
 
 
-def test_stray_outcome_is_isolated_with_a_warning():
-    """Alt/Üst altında listelenen hatalı '1' kaydı gelirse yalıtılır."""
+def test_stray_outcome_is_rejected_rather_than_silently_isolated():
+    """Alt/Üst altında listelenen hatalı '1' kaydı değerlendirilemez.
+
+    Yalıtmak seçimi koşulsuz toplanır hâle getirip max gain'i şişirirdi;
+    eşik gerektiren piyasalarda çözümlenemeyen seçim reddedilir.
+    """
     stray = SelectionInput(
         match_id="m1",
         odd_type_id=0,
@@ -509,6 +513,5 @@ def test_stray_outcome_is_isolated_with_a_warning():
         is_live=1,
         special_bet_value="1.5",
     )
-    result = calculate_max_gain(coupon(stray))
-    assert result.matches[0].weight == Decimal("1.60")
-    assert any("yönü anlaşılamadı" in w for w in result.warnings)
+    with pytest.raises(CouponError, match="specialBetValue gerektirir"):
+        calculate_max_gain(coupon(stray))

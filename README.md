@@ -442,6 +442,12 @@ Beş satırın üçü en iyi senaryoda birlikte kazanır:
 | `maxPayoutCap` | decimal | — | Aşılırsa ödeme kırpılır, `capped: true` |
 | `currency` | ISO-4217 | — | Varsayılan `TRY` |
 
+**Eşik gerektiren piyasalar** (Alt/Üst, handikap, canlı "maçın kalanı" ve "sıradaki gol")
+`specialBetValue` olmadan çözümlenemez ve istek `422` ile reddedilir. Bu seçimleri yalıtmak
+onları koşulsuz toplanır hâle getirir ve max gain'i sessizce şişirir — gerçek bir kuponda
+`23.50` yerine `40.50` çıkmıştı. Canlı maçlarda anlık skor temelli piyasalar için
+`currentScore` da eşiği doldurabilir.
+
 Her seçim ya `oddId` ile ya da `oddTypeId` + `outcome` ile tanımlanmalıdır.
 Aynı `(matchId, isLive, oddId, oddTypeId, outcome, specialBetValue)` altılısı iki kez gönderilemez — ama
 `Üst 0.5` ile `Üst 2.5` farklı seçimlerdir ve birlikte oynanabilir. Geçersiz kuponlar `422` ile ve

@@ -488,3 +488,44 @@ def test_live_example_carries_the_current_score():
     assert all(selection["isLive"] == 1 for selection in live["selections"])
     assert all("currentScore" in selection for selection in live["selections"])
     assert {s["currentScore"] for s in live["selections"]} == {"0:0", "0:2"}
+
+
+def test_missing_threshold_is_rejected_not_silently_inflated():
+    """Alt/Üst piyasası eşiksiz gelirse istek reddedilmeli.
+
+    Seçimi yalıtmak onu koşulsuz toplanır hâle getirir ve max gain'i sessizce
+    şişirir: bu kuponda 23.50 yerine 40.50 çıkıyordu.
+    """
+
+    def payload(special: str | None) -> dict:
+        return {
+            "couponAmount": "10.00",
+            "selections": [
+                {
+                    "matchId": 72723182,
+                    "isLive": 0,
+                    "oddTypeId": 1642,
+                    "outcome": "Under",
+                    "specialBetValue": special,
+                    "odds": "3.40",
+                },
+                {
+                    "matchId": 72723182,
+                    "isLive": 0,
+                    "oddTypeId": 1462,
+                    "outcome": "1",
+                    "odds": "4.70",
+                },
+            ],
+        }
+
+    rejected = client.post("/api/v1/coupons/max-gain", json=payload(None))
+    assert rejected.status_code == 422
+    assert "specialBetValue gerektirir" in rejected.json()["detail"]
+
+    accepted = client.post("/api/v1/coupons/max-gain", json=payload("(0.5)"))
+    assert accepted.status_code == 200
+    body = accepted.json()
+    # İlk yarı 0-0 biterse ev sahibi devreyi önde kapatamaz -> çelişki
+    assert body["maxGain"] == "23.50"
+    assert body["warnings"] == []
